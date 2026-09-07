@@ -49,6 +49,23 @@ describe('arcade sphere driving', () => {
     }
   });
 
+  it.each(['bay', 'station'] as const)('synchronizes the %s recovery pose immediately without reviving a delivered parcel', prototype => {
+    const world = new PlanetWorld(prototype);
+    const environment = world.drivingEnvironment!;
+    const vehicle = new Vehicle(new Scene(), environment);
+    drive(vehicle, 0.6, { throttle: 1, steer: 0, boost: true });
+    expect(surfaceDistance(vehicle.normal, environment.recoveryPose.normal)).toBeGreaterThan(0.5);
+    vehicle.setCargoVisible(false);
+    vehicle.recover();
+    expect(vehicle.drive!.recoveries).toBe(1);
+    expect(vehicle.normal.distanceTo(environment.recoveryPose.normal)).toBeLessThan(1e-12);
+    expect(vehicle.forward.distanceTo(environment.recoveryPose.forward)).toBeLessThan(1e-12);
+    expect(vehicle.root.position.clone().normalize().distanceTo(environment.recoveryPose.normal)).toBeLessThan(1e-12);
+    expect(vehicle.speed).toBe(0); expect(vehicle.charge).toBe(1);
+    expect(vehicle.landingGuideVisible).toBe(false);
+    expect(vehicle.cargoVisible).toBe(false);
+  });
+
   it('has a reachable start and unblocked delivery-pad centers', () => {
     const world = new PlanetWorld();
     for (const normal of [START_NORMAL, ...world.destinations.map(target => target.normal)]) {

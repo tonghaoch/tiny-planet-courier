@@ -2,7 +2,9 @@ import * as THREE from 'three';
 import './style.css';
 import { AudioFeedback } from './audio';
 import type { BayDriveEvent } from './bay-types';
-import { BAY_RECORD_KEY, DeliveryRun, saveBest } from './game';
+import { DeliveryRun, saveBest } from './game';
+import { selectPrototype } from './delivery-prototypes';
+import type { StationRoute } from './station-level';
 import { Input } from './input';
 import { headingTo, PLANET_RADIUS, spherical, surfaceDistance, tangent, UP } from './math';
 import { UI, type BayHUDState } from './ui';
@@ -10,8 +12,10 @@ import { Vehicle, type Controls } from './vehicle';
 import { createSpace, PlanetWorld } from './world';
 
 const parameters = new URLSearchParams(location.search);
-const bayPrototype = import.meta.env.DEV && parameters.get('prototype') === 'bay';
-const ui = new UI(bayPrototype);
+const prototype = selectPrototype(location.search, import.meta.env.DEV);
+const authoredPrototype = prototype !== null;
+const bayPrototype = prototype?.id === 'bay';
+const ui = new UI(prototype);
 ui.onAction = action => { if (action === 'reload') location.reload(); };
 
 try {
@@ -51,10 +55,11 @@ try {
   const space = createSpace();
   scene.add(space);
   const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
-  const world = new PlanetWorld(bayPrototype, reducedMotion);
+  const world = new PlanetWorld(prototype?.id ?? false, reducedMotion);
+  if (world.stationLevel) sun.position.copy(world.stationLevel.toNormal(-5, 8)).multiplyScalar(55);
   scene.add(world.root);
-  const vehicle = new Vehicle(scene, world.bayEnvironment, reducedMotion);
-  const run = new DeliveryRun(world.destinations, { keepDrivingOnFinish: bayPrototype });
+  const vehicle = new Vehicle(scene, world.drivingEnvironment, reducedMotion);
+  const run = new DeliveryRun(world.destinations, { keepDrivingOnFinish: authoredPrototype });
   const sound = new AudioFeedback();
   ui.setDestinations(world.destinations);
   world.setActiveDestination(0);
@@ -72,7 +77,8 @@ try {
   let last = performance.now();
   let uiClock = 0;
   let resultDelay = 0;
-  let pendingBayResult: { time: number; newRecord: boolean } | null = null;
+  let pendingResult: { time: number; newRecord: boolean } | null = null;
+  let stationRoute: StationRoute | null = null;
   let testControls: Controls | null = null;
   const recentDriveEvents: string[] = [];
 
@@ -80,7 +86,7 @@ try {
     input.clear();
     testControls = null;
     vehicle.recover();
-    if (!bayPrototype) ui.toast('Van recovered. Ready to roll.');
+    if (!authoredPrototype) ui.toast('Van recovered. Ready to roll.');
   });
 
   function start() {
@@ -89,9 +95,10 @@ try {
     testControls = null;
     vehicle.reset();
     run.start();
-    world.resetBayDelivery();
+    world.resetDelivery();
     world.setActiveDestination(0);
-    pendingBayResult = null;
+    pendingResult = null;
+    stationRoute = null;
     resultDelay = 0;
     airBlend = 0;
     recentDriveEvents.length = 0;
@@ -100,9 +107,9 @@ try {
     sound.unlock();
     ui.setMode('playing');
     renderer.domElement.focus({ preventScroll: true });
-    ui.toast(bayPrototype ? 'Coast road for a cruise. Hold boost for the ramp.' : 'WASD to drive · Park in the glow to deliver');
+    ui.toast(prototype?.hints.start ?? 'WASD to drive · Park in the glow to deliver');
     accumulator = 0;
-    if (bayPrototype && replay) { homeBlend = 0; firstFrame = true; }
+    if (authoredPrototype && replay) { homeBlend = 0; firstFrame = true; }
   }
 
   function togglePause() {
@@ -126,9 +133,10 @@ try {
       testControls = null;
       run.home();
       vehicle.reset();
-      world.resetBayDelivery();
+      world.resetDelivery();
       world.setActiveDestination(0);
-      pendingBayResult = null;
+      pendingResult = null;
+      stationRoute = null;
       resultDelay = 0;
       ui.resetJourney();
       sound.setPaused(true);
@@ -169,7 +177,8 @@ try {
         testControls = null;
         firstFrame = true;
         airBlend = 0;
-        ui.toast('Ready for another go. Boost before the ramp—or take the coast.');
+        stationRoute = null;
+        ui.toast(prototype?.hints.recovery ?? 'Van recovered. Ready to roll.');
       } else if (event.type === 'land' && !run.finished && world.bayLevel && world.bayLevel.toLocal(event.normal).x > 0) {
         ui.toast('Across the bay! Brake for the bakery.');
       }
@@ -178,6 +187,11 @@ try {
 
   function navigationTarget(): THREE.Vector3 | undefined {
     if (!run.target) return undefined;
+    if (world.stationLevel && vehicle.drive?.phase === 'grounded') {
+      const navigation = world.stationLevel.navigation(vehicle.normal, stationRoute);
+      stationRoute = navigation.route;
+      return navigation.target;
+    }
     if (!world.bayLevel || vehicle.drive?.phase !== 'grounded') return run.target.normal;
     const local = world.bayLevel.toLocal(vehicle.normal);
     if (local.y < 1.3) return run.target.normal;
@@ -201,14 +215,14 @@ try {
     const portrait = width / height < 0.94;
     space.children.forEach(child => { if (!(child instanceof THREE.Points)) child.visible = !portrait; });
     const distance = portrait ? Math.max(56, PLANET_RADIUS * height / (width * 0.91 * Math.tan(THREE.MathUtils.degToRad(19)))) : 54;
-    const orbit = spherical(23 + (reducedMotion ? 0 : Math.sin(elapsed * 0.05) * 1.5), (bayPrototype ? 25 : 34) + (reducedMotion ? 0 : Math.sin(elapsed * 0.032) * 13));
+    const orbit = spherical((world.stationLevel ? -4 : 23) + (reducedMotion ? 0 : Math.sin(elapsed * 0.05) * 1.5), (world.stationLevel ? 70 : bayPrototype ? 25 : 34) + (reducedMotion ? 0 : Math.sin(elapsed * 0.032) * 13));
     const homePosition = orbit.multiplyScalar(distance);
-    const cameraHeight = bayPrototype ? (portrait ? 13 : 11.8) : (portrait ? 10 : 7.8);
-    const cameraBehind = bayPrototype ? (portrait ? 10.2 : 8.4) : (portrait ? 13 : 10.2);
+    const cameraHeight = authoredPrototype ? (portrait ? 13 : 11.8) : (portrait ? 10 : 7.8);
+    const cameraBehind = authoredPrototype ? (portrait ? 10.2 : 8.4) : (portrait ? 13 : 10.2);
     const followPosition = vehicle.normal.clone().multiplyScalar(PLANET_RADIUS + cameraHeight + vehicle.altitude * 0.3 + airMotion * 1.3).addScaledVector(vehicle.forward, -cameraBehind - airMotion * 1.4);
     desiredPosition.copy(followPosition).lerp(homePosition, homeBlend);
-    const lookAhead = bayPrototype ? (run.finished ? 0.2 : 1.3) : 1.7;
-    const followLook = vehicle.normal.clone().multiplyScalar(PLANET_RADIUS + 0.3 + (bayPrototype ? Math.min(1, vehicle.altitude) * 0.4 : 0)).addScaledVector(vehicle.forward, lookAhead + airMotion * 1.2);
+    const lookAhead = authoredPrototype ? (run.finished ? 0.2 : 1.3) : 1.7;
+    const followLook = vehicle.normal.clone().multiplyScalar(PLANET_RADIUS + 0.3 + (authoredPrototype ? Math.min(1, vehicle.altitude) * 0.4 : 0)).addScaledVector(vehicle.forward, lookAhead + airMotion * 1.2);
     desiredLook.copy(followLook).multiplyScalar(1 - homeBlend);
     const cameraUp = vehicle.normal.clone().lerp(UP, homeBlend).normalize();
     if (firstFrame) {
@@ -260,12 +274,12 @@ try {
           world.celebrate(world.destinations[delivery.index].normal);
           world.setActiveDestination(run.index);
           sound.chime(delivery.finished);
-          if (bayPrototype && delivery.finished) {
+          if (prototype && delivery.finished) {
             vehicle.syncVisual(0, elapsed);
             const parcelStart = vehicle.getParcelWorldPosition();
             vehicle.setCargoVisible(false);
-            world.startBayDelivery(parcelStart);
-            pendingBayResult = { time: run.elapsed, newRecord: saveBest(run.elapsed, BAY_RECORD_KEY) };
+            world.startDelivery(parcelStart, delivery.index);
+            pendingResult = { time: run.elapsed, newRecord: saveBest(run.elapsed, prototype.bestScoreKey) };
             resultDelay = 1.15;
           } else if (delivery.finished) {
             vehicle.speed = 0;
@@ -277,11 +291,11 @@ try {
         accumulator -= step;
         if (run.mode !== 'playing') { accumulator = 0; break; }
       }
-      if (pendingBayResult) {
+      if (pendingResult) {
         resultDelay -= dt;
         if (resultDelay <= 0) {
-          ui.showBayResults(pendingBayResult.time, pendingBayResult.newRecord);
-          pendingBayResult = null;
+          ui.showBayResults(pendingResult.time, pendingResult.newRecord);
+          pendingResult = null;
         }
       }
     } else accumulator = 0;
@@ -299,9 +313,13 @@ try {
       const navigation = navigationTarget();
       const heading = navigation ? headingTo(vehicle.normal, vehicle.forward, navigation) : 0;
       let bayState: BayHUDState | undefined;
-      if (vehicle.drive && world.bayLevel) {
-        const surface = world.bayLevel.sampleSurface(vehicle.normal);
-        bayState = { phase: vehicle.drive.phase, onRamp: surface.kind === 'ramp', onCoastalRoad: world.bayLevel.toLocal(vehicle.normal).y > 1.3, nearBakery: distance < 6.5 };
+      if (vehicle.drive && world.authoredLevel) {
+        const surface = world.authoredLevel.sampleSurface(vehicle.normal);
+        bayState = {
+          phase: vehicle.drive.phase, onRamp: surface.kind === 'ramp',
+          onCoastalRoad: !!world.bayLevel && world.bayLevel.toLocal(vehicle.normal).y > 1.3,
+          nearDestination: distance < (world.stationLevel ? 2.6 : 6.5), route: stationRoute,
+        };
       }
       ui.update(run, vehicle.speed, vehicle.charge, distance, heading, bayState);
       ui.setSound(sound.enabled);
@@ -319,13 +337,18 @@ try {
           normal: vehicle.normal.toArray(), forward: vehicle.forward.toArray(),
           cameraRadius: camera.position.length(), drawCalls: renderer.info.render.calls, triangles: renderer.info.render.triangles,
           target: run.target?.normal.toArray(), heading: run.target ? headingTo(vehicle.normal, vehicle.forward, run.target.normal) : 0,
-          prototype: bayPrototype, phase: vehicle.drive?.phase, recoveries: vehicle.drive?.recoveries,
+          prototype: authoredPrototype, prototypeId: prototype?.id ?? 'standard', phase: vehicle.drive?.phase, recoveries: vehicle.drive?.recoveries,
           jumps: vehicle.drive?.jumps, landings: vehicle.drive?.landings, cargoVisible: vehicle.cargoVisible,
           landingGuideVisible: vehicle.landingGuideVisible,
-          local: world.bayLevel?.toLocal(vehicle.normal), reaction: bayPrototype ? world.getBayReactionSnapshot() : undefined,
+          local: world.authoredLevel?.toLocal(vehicle.normal), reaction: authoredPrototype ? world.getDeliveryReactionSnapshot() : undefined,
+          navigationTarget: navigationTarget()?.toArray(), route: stationRoute,
           events: recentDriveEvents.slice(),
         }),
-        routes: () => world.bayLevel ? {
+        routes: () => world.stationLevel ? {
+          outer: world.stationLevel.outerRoute.map(point => point.toArray()),
+          inner: world.stationLevel.innerRoute.map(point => point.toArray()),
+          destination: world.destinations[0].normal.toArray(),
+        } : world.bayLevel ? {
           safe: world.bayLevel.safeRoute.map(point => point.toArray()),
           jump: world.bayLevel.jumpRoute.map(point => point.toArray()),
           destination: world.destinations[0].normal.toArray(),

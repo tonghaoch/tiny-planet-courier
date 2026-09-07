@@ -57,6 +57,18 @@ Open **http://127.0.0.1:5173/?prototype=bay** for the experimental one-parcel ro
 
 The prototype has its own best-time record. Its entry is available only in Vite development mode; production builds and the current live game retain the original route. Development is checkpointed on `prototype/bay-leap`; it has not been merged into `main` or deployed.
 
+### Stargaze Station playtest — development only
+
+Open **http://127.0.0.1:5173/?prototype=station** for the next independent one-parcel route: a **letter from Earth** for Stargaze Station. This does not replace Bay Leap or join the destinations into a longer tour.
+
+- Follow the green arrows around the wide **outer road**, or take the coral-arrow **inner lane** and brake early for its tighter bends.
+- Both roads use the same driving controller and tuning as Bay Leap. Rocks and planters define the approaches; there are no new buttons, jumps, grip rules or time limits.
+- Park in the glow to hand over the letter. The recipient, warm lamps and turning telescope react without taking away driving control.
+- **R** immediately returns to the approach with the current delivery clock intact. **Try another route** resets the letter, reaction and clock for another attempt at this same destination.
+- Station has its own best-time record, separate from the original game and Bay Leap. Keyboard, optional sound and touch controls remain available after delivery.
+
+Both prototype selectors are development-only. Production builds and `npm run preview` intentionally keep the original three-delivery game, including when prototype query parameters are present.
+
 See the [iteration plan and handoff](docs/iteration-plan.md) for a fresh-computer setup, completed work, verification results, and the next playtest decisions.
 
 ## How to play
@@ -82,12 +94,14 @@ The pale roads connect the sights, but you can drive freely over both land and w
 npm run build
 npm test
 npm run test:browser
+npm run test:preview
 npm run preview
 ```
 
 - `build`: Checks TypeScript and generates the static site in `dist/`.
 - `test`: Runs Vitest unit tests for spherical math, driving, and delivery rules.
-- `test:browser`: Uses Playwright with a locally installed Microsoft Edge to check desktop and narrow-screen layouts, driving, pause/resume, deliveries, replay, touch controls, graphics recovery messages, and unavailable storage. If Edge is not installed, update `playwright.config.ts` and install the browser you want to test with.
+- `test:browser`: Uses Playwright to check the original game and both prototypes, including physically driven routes, desktop/narrow-screen layouts, pause/resume, deliveries, replay, touch controls, graphics recovery and unavailable storage. Defaults to locally installed Microsoft Edge; with Chrome installed, use `PLAYWRIGHT_CHANNEL=chrome npm run test:browser`.
+- `test:preview`: Builds and checks that production still shows the original game and never exposes the local test bridge. Use `PLAYWRIGHT_CHANNEL=chrome npm run test:preview` to select Chrome instead of Edge.
 - Browser screenshots are saved to `artifacts/`. Failure diagnostics are saved to `test-results/`.
 
 The production build uses the `/tiny-planet-courier/` base path. After building, `npm run preview` serves it at **http://127.0.0.1:4173/tiny-planet-courier/** by default; `npm run dev` still uses the root URL. Update `vite.config.ts` if you deploy under a different path or a custom domain. Do not launch the source by double-clicking `index.html` with a `file://` URL.
@@ -108,7 +122,7 @@ Deployment only proceeds when tests and the build succeed. The workflow uses Git
 
 You can also open **Actions → Deploy to GitHub Pages → Run workflow** and select `main` to redeploy manually. The repository's **Settings → Pages → Source** must be **GitHub Actions**. Production deployments are restricted to `main`.
 
-The browser tests remain a separate local check because they currently require an installed Microsoft Edge. The deployment workflow runs unit tests and the production build on Ubuntu.
+The browser tests remain separate local checks because they require an installed browser. The deployment workflow runs unit tests and the production build on Ubuntu.
 
 ## Technology and scope
 

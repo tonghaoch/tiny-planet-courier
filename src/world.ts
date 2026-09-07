@@ -2,6 +2,9 @@ import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { PLANET_RADIUS as R, UP, seededRandom, spherical, surfaceDistance, type Collider, type Destination } from './math';
 import { BAY_LEVEL, BayLevel, inBayPolygon, type BayPoint } from './bay-level';
+import type { AuthoredLevel } from './authored-level';
+import { STATION_LEVEL, StationLevel } from './station-level';
+import { StationDeliveryReaction } from './station-reaction';
 import type { BayEnvironment } from './bay-types';
 
 const PALETTE = { ocean: 0x387f8b, shallow: 0x70baa9, sand: 0xe4cf9f, grass: 0x88b99b, leaf: 0x568a76, darkLeaf: 0x326f62, road: 0xe8d9b8, orange: 0xf49869, cream: 0xffebcb };
@@ -58,6 +61,9 @@ export class PlanetWorld {
   readonly root = new THREE.Group();
   readonly colliders: Collider[] = [];
   readonly bayLevel: BayLevel | null;
+  readonly stationLevel: StationLevel | null;
+  readonly authoredLevel: AuthoredLevel | null;
+  readonly drivingEnvironment: BayEnvironment | null;
   readonly bayEnvironment: BayEnvironment | null;
   readonly destinations: Destination[] = [
     { id: 'bakery', name: 'Sunrise Bakery', label: 'SUNRISE BAKERY', parcel: 'A bag of warm croissants', normal: spherical(30, 28), color: 0xf6b87b },
@@ -78,22 +84,27 @@ export class PlanetWorld {
   private readonly splashMaterials = [material(0x81d8e0), material(0x459eb9), material(0xd8f4e8)];
   private readonly splashParticles: { mesh: THREE.Mesh; velocity: THREE.Vector3; life: number }[] = [];
   private bakeryReaction: BakeryReaction | null = null;
+  private stationReaction: StationDeliveryReaction | null = null;
 
-  constructor(bayPrototype = false, private readonly reducedMotion = false) {
-    this.bayLevel = bayPrototype ? new BayLevel() : null;
-    const level = this.bayLevel;
-    this.bayEnvironment = level ? {
+  constructor(prototype: boolean | 'bay' | 'station' = false, private readonly reducedMotion = false) {
+    this.bayLevel = prototype === true || prototype === 'bay' ? new BayLevel() : null;
+    this.stationLevel = prototype === 'station' ? new StationLevel() : null;
+    this.authoredLevel = this.bayLevel ?? this.stationLevel;
+    const level = this.authoredLevel;
+    this.drivingEnvironment = level ? {
       spawnPose: level.spawnPose,
       recoveryPose: level.recoveryPose,
       colliders: this.colliders,
       sampleSurface: normal => level.sampleSurface(normal),
       crossRampLip: (previous, next) => level.crossRampLip(previous, next),
     } : null;
+    this.bayEnvironment = this.drivingEnvironment;
     if (level) this.destinations = [level.destination];
     this.buildPlanet();
     this.buildRoads();
     this.buildSettlements();
-    if (level) this.buildBayLocale();
+    if (this.bayLevel) this.buildBayLocale();
+    if (this.stationLevel) this.buildStationLocale();
     this.buildNature();
     this.buildClouds();
     this.buildTargets();
@@ -107,6 +118,7 @@ export class PlanetWorld {
     // Register the ancestor BEFORE collecting batches: doors, limbs, parcel and windows
     // must keep their transforms/material ownership through every replay.
     if (this.bakeryReaction) animated.add(this.bakeryReaction.root);
+    if (this.stationReaction) animated.add(this.stationReaction.root);
     const batches = new Map<string, THREE.Mesh<THREE.BufferGeometry, THREE.MeshStandardMaterial>[]>();
     this.root.updateMatrixWorld(true);
     this.root.traverse(object => {
@@ -137,7 +149,7 @@ export class PlanetWorld {
     }
   }
 
-  heightAt(normal: THREE.Vector3): number { return this.bayLevel ? this.bayLevel.sampleSurface(normal).radius : R + 0.105; }
+  heightAt(normal: THREE.Vector3): number { return this.authoredLevel ? this.authoredLevel.sampleSurface(normal).radius : R + 0.105; }
 
   private terrain(n: THREE.Vector3): number {
     return Math.sin(n.x * 4.8 + n.z * 2.7) * 0.44 + Math.cos(n.y * 5.2 - n.x * 2) * 0.38 + Math.sin(n.z * 8 + n.y * 3) * 0.17;
@@ -180,7 +192,7 @@ export class PlanetWorld {
         const rightPoint = n.clone().multiplyScalar(R + 0.075).addScaledVector(right, 0.52).normalize().multiplyScalar(R + 0.085);
         vertices.push(...leftPoint.toArray(), ...rightPoint.toArray());
         const next = normals[Math.min(i + 1, normals.length - 1)];
-        const clipped = this.bayLevel && [n, next, n.clone().add(next).normalize()].some(p => this.bayLevel!.isInSceneryClearance(p));
+        const clipped = this.authoredLevel && [n, next, n.clone().add(next).normalize()].some(p => this.authoredLevel!.isInSceneryClearance(p));
         if (i < normals.length - 1 && !clipped) {
           const k = i * 2;
           indices.push(k, k + 1, k + 2, k + 1, k + 3, k + 2);
@@ -208,7 +220,7 @@ export class PlanetWorld {
   }
 
   private house(n: THREE.Vector3, color: number, scale = 1, style = 0) {
-    if (this.bayLevel?.isInSceneryClearance(n, Math.max(BAY_LEVEL.sceneryClearance, scale))) return;
+    if (this.authoredLevel?.isInSceneryClearance(n, Math.max(this.authoredLevel.definition.sceneryClearance, scale))) return;
     const group = align(n);
     group.rotateY(this.random() * Math.PI * 2);
     const wall = material(color);
@@ -252,7 +264,7 @@ export class PlanetWorld {
     this.house(spherical(-43, 95), 0xe5b8ac, 0.95, 2);
     this.house(spherical(53, -62), 0xe7d1a8, 1.0, 0);
 
-    if (!this.bayLevel?.isInSceneryClearance(spherical(54, -47), 1.7)) {
+    if (!this.authoredLevel?.isInSceneryClearance(spherical(54, -47), 1.7)) {
       const windmill = align(spherical(54, -47));
       mesh(new THREE.CylinderGeometry(0.31, 0.49, 1.9, 8), material(0xeedbbe), windmill, 0, 0.95);
       mesh(new THREE.ConeGeometry(0.54, 0.60, 8), material(0xbb866c), windmill, 0, 2.15);
@@ -273,7 +285,7 @@ export class PlanetWorld {
       this.colliders.push({ normal: spherical(54, -47), radius: 0.6 });
     }
 
-    if (!this.bayLevel?.isInSceneryClearance(spherical(-4, 92))) {
+    if (!this.authoredLevel?.isInSceneryClearance(spherical(-4, 92))) {
       const observatory = align(spherical(-4, 92));
       mesh(new THREE.CylinderGeometry(0.69, 0.75, 0.86, 16), material(0xeee1cd), observatory, 0, 0.46);
       mesh(new THREE.SphereGeometry(0.72, 16, 10, 0, Math.PI * 2, 0, Math.PI / 2), material(0x8d9bad, { metalness: 0.22 }), observatory, 0, 0.88);
@@ -283,7 +295,7 @@ export class PlanetWorld {
       this.colliders.push({ normal: spherical(-4, 92), radius: 0.75 });
     }
 
-    if (!this.bayLevel?.isInSceneryClearance(spherical(-13, -30))) {
+    if (!this.authoredLevel?.isInSceneryClearance(spherical(-13, -30))) {
       const lighthouse = align(spherical(-13, -30));
       for (let i = 0; i < 5; i++) mesh(new THREE.CylinderGeometry(0.3 - i * 0.02, 0.32 - i * 0.02, 0.36, 10), material(i % 2 ? 0xdf977d : 0xf8e6c6), lighthouse, 0, 0.18 + i * 0.36);
       mesh(new THREE.CylinderGeometry(0.31, 0.31, 0.35, 10), material(0xffd58b, { emissive: 0xffc36d, emissiveIntensity: 0.6 }), lighthouse, 0, 1.98);
@@ -296,14 +308,14 @@ export class PlanetWorld {
   /** Triangulate in authored coordinates, then split every long chord before projection.
    * Even the low water overlay stays outside the original radius between vertices.
    */
-  private bayOverlay(name: string, polygons: readonly (readonly BayPoint[])[], radiusAt: (p: BayPoint) => number, mat: THREE.MeshStandardMaterial, colorAt?: (p: BayPoint) => THREE.Color) {
-    const level = this.bayLevel!;
+  private localeOverlay(name: string, polygons: readonly (readonly BayPoint[])[], radiusAt: (p: BayPoint) => number, mat: THREE.MeshStandardMaterial, colorAt?: (p: BayPoint) => THREE.Color) {
+    const level = this.authoredLevel!;
     const positions: number[] = [], colors: number[] = [];
     const lengthSq = (a: BayPoint, b: BayPoint) => (a.x - b.x) ** 2 + (a.y - b.y) ** 2;
     const append = (a: BayPoint, b: BayPoint, c: BayPoint) => {
       const edges = [lengthSq(a, b), lengthSq(b, c), lengthSq(c, a)];
       const longest = Math.max(...edges);
-      if (longest > BAY_LEVEL.overlayMaxEdge ** 2) {
+      if (longest > level.definition.overlayMaxEdge ** 2) {
         // Longest-edge bisection avoids exploding an entire large triangle into a grid.
         const edge = edges.indexOf(longest);
         const [p, q, other] = edge === 0 ? [a, b, c] : edge === 1 ? [b, c, a] : [c, a, b];
@@ -334,8 +346,8 @@ export class PlanetWorld {
     return overlay;
   }
 
-  private bayFrame(p: BayPoint, facing: BayPoint, radius = BAY_LEVEL.surfaceRadii.ground) {
-    const level = this.bayLevel!;
+  private localeFrame(p: BayPoint, facing: BayPoint, radius = this.authoredLevel!.definition.surfaceRadii.ground) {
+    const level = this.authoredLevel!;
     const normal = level.toNormal(p.x, p.y);
     const forward = level.toNormal(facing.x, facing.y);
     forward.addScaledVector(normal, -forward.dot(normal)).normalize();
@@ -346,16 +358,17 @@ export class PlanetWorld {
     return group;
   }
 
-  private bayArrow(p: BayPoint, direction: BayPoint, scale = 1, color = PALETTE.orange) {
+  private localeArrow(p: BayPoint, direction: BayPoint, scale = 1, color = PALETTE.orange) {
     const d = Math.hypot(direction.x, direction.y);
     const x = direction.x / d, y = direction.y / d;
     const shape = [[-0.40, -0.12], [0.08, -0.12], [0.08, -0.28], [0.46, 0], [0.08, 0.28], [0.08, 0.12], [-0.40, 0.12]];
     const polygon = shape.map(([a, b]) => ({ x: p.x + (x * a - y * b) * scale, y: p.y + (y * a + x * b) * scale }));
-    this.bayOverlay('bay-route-arrow', [polygon], q => this.bayLevel!.sampleSurface(this.bayLevel!.toNormal(q.x, q.y)).radius + 0.012, material(color));
+    const level = this.authoredLevel!;
+    this.localeOverlay(`${this.stationLevel ? 'station' : 'bay'}-route-arrow`, [polygon], q => level.sampleSurface(level.toNormal(q.x, q.y)).radius + 0.012, material(color));
   }
 
   /** Canvas is optional: arrows, colors and physical signboards still exist in Node. */
-  private bayPlaque(parent: THREE.Object3D, label: string, width: number, height: number, y: number, z: number, ink = '#655747') {
+  private localePlaque(parent: THREE.Object3D, label: string, width: number, height: number, y: number, z: number, ink = '#655747') {
     mesh(new THREE.BoxGeometry(width + 0.09, height + 0.06, 0.06), material(PALETTE.cream), parent, 0, y, z);
     if (typeof document === 'undefined') return;
     try {
@@ -370,7 +383,7 @@ export class PlanetWorld {
       const texture = new THREE.CanvasTexture(canvas);
       texture.colorSpace = THREE.SRGBColorSpace;
       const text = mesh(new THREE.PlaneGeometry(width, height), new THREE.MeshBasicMaterial({ map: texture }), parent, 0, y, z + 0.032, false);
-      text.name = `bay-label-${label.toLowerCase().replaceAll(' ', '-')}`;
+      text.name = `${this.stationLevel ? 'station' : 'bay'}-label-${label.toLowerCase().replaceAll(' ', '-')}`;
     } catch { /* Browsers with disabled canvas can still play; Node never enters here. */ }
   }
 
@@ -379,7 +392,7 @@ export class PlanetWorld {
     const radii = BAY_LEVEL.surfaceRadii;
     const sand = new THREE.Color(0xead5a8), mint = new THREE.Color(PALETTE.grass);
     const shallow = new THREE.Color(0x8ad8ce), blue = new THREE.Color(0x479cae);
-    this.bayOverlay('bay-land', [BAY_LEVEL.landPolygon], () => radii.ground,
+    this.localeOverlay('bay-land', [BAY_LEVEL.landPolygon], () => radii.ground,
       material(0xffffff, { vertexColors: true, roughness: 1 }), p => {
         const coast = Math.min(1, level.distanceToShore(p.x, p.y) / 1.1);
         const color = sand.clone().lerp(mint, coast);
@@ -387,24 +400,24 @@ export class PlanetWorld {
         if (p.x >= landing.minX && p.x <= landing.maxX && p.y >= landing.minY && p.y <= landing.maxY) color.lerp(new THREE.Color(0xb5d7b4), 0.65);
         return color;
       });
-    this.bayOverlay('bay-water', [BAY_LEVEL.waterPolygon], () => radii.water,
+    this.localeOverlay('bay-water', [BAY_LEVEL.waterPolygon], () => radii.water,
       material(0xffffff, { vertexColors: true, roughness: 0.68, metalness: 0.02 }), p => shallow.clone().lerp(blue, Math.min(1, level.distanceToShore(p.x, p.y) / 0.85)));
     const circle = Array.from({ length: 64 }, (_, i) => ({
       x: BAY_LEVEL.pad.center.x + Math.cos(i / 64 * Math.PI * 2) * BAY_LEVEL.pad.radius,
       y: BAY_LEVEL.pad.center.y + Math.sin(i / 64 * Math.PI * 2) * BAY_LEVEL.pad.radius,
     }));
-    this.bayOverlay('bay-road', [...Object.values(BAY_LEVEL.roads).map(road => road.polygon), circle], () => radii.road, material(PALETTE.road, { roughness: 0.96 }));
+    this.localeOverlay('bay-road', [...Object.values(BAY_LEVEL.roads).map(road => road.polygon), circle], () => radii.road, material(PALETTE.road, { roughness: 0.96 }));
     this.buildBayRamp();
-    this.bayArrow({ x: -6, y: 1.2 }, { x: 0, y: 1 }, 0.82, 0x4d927c);
-    this.bayArrow({ x: -5.45, y: 0 }, { x: 1, y: 0 }, 0.65);
-    this.bayArrow({ x: -3.65, y: 0 }, { x: 1, y: 0 }, 0.9);
-    this.bayArrow({ x: 5.8, y: 0 }, { x: 1, y: 0 }, 0.85, 0xfff2d5);
+    this.localeArrow({ x: -6, y: 1.2 }, { x: 0, y: 1 }, 0.82, 0x4d927c);
+    this.localeArrow({ x: -5.45, y: 0 }, { x: 1, y: 0 }, 0.65);
+    this.localeArrow({ x: -3.65, y: 0 }, { x: 1, y: 0 }, 0.9);
+    this.localeArrow({ x: 5.8, y: 0 }, { x: 1, y: 0 }, 0.85, 0xfff2d5);
 
-    const sign = this.bayFrame({ x: -6.15, y: -1.55 }, { x: -8, y: -1.55 });
+    const sign = this.localeFrame({ x: -6.15, y: -1.55 }, { x: -8, y: -1.55 });
     sign.name = 'bay-fork-sign';
     mesh(new THREE.BoxGeometry(0.1, 1.28, 0.1), material(0x866b51), sign, 0, 0.64);
-    this.bayPlaque(sign, 'SAFE ROAD', 1.12, 0.24, 1.19, 0.04, '#427760');
-    this.bayPlaque(sign, 'BAY JUMP', 1.12, 0.24, 0.83, 0.04, '#ad6245');
+    this.localePlaque(sign, 'SAFE ROAD', 1.12, 0.24, 1.19, 0.04, '#427760');
+    this.localePlaque(sign, 'BAY JUMP', 1.12, 0.24, 0.83, 0.04, '#ad6245');
     // Non-text directional silhouettes survive the no-canvas fallback.
     for (const [height, color, angle] of [[1.19, 0x589880, Math.PI / 2], [0.83, PALETTE.orange, 0]]) {
       const arrow = mesh(new THREE.ConeGeometry(0.13, 0.25, 3), material(color), sign, 0.73, height, 0.04);
@@ -416,14 +429,14 @@ export class PlanetWorld {
     const waveGeometry = new THREE.BoxGeometry(0.34, 0.008, 0.027);
     for (const p of [{ x: -0.8, y: 1.2 }, { x: 0.9, y: -0.3 }, { x: -0.6, y: -1.6 }, { x: 1.5, y: -3.2 }, { x: -2, y: -4.5 }]) {
       if (!inBayPolygon(p, BAY_LEVEL.waterPolygon)) continue;
-      const wave = this.bayFrame(p, { x: p.x, y: p.y + 1 }, radii.water + 0.009);
+      const wave = this.localeFrame(p, { x: p.x, y: p.y + 1 }, radii.water + 0.009);
       mesh(waveGeometry, material(0xc4eee0), wave, 0, 0, 0, false);
       mesh(waveGeometry, material(0xa0ded4), wave, 0.16, 0, 0.15, false).scale.x = 0.6;
       this.root.add(wave);
     }
     // Low landing chevrons sit OUTSIDE the usable 3.3 m-wide landing area.
     for (const x of [3.1, 4.8, 6.5]) for (const y of [-1.84, 1.84]) {
-      this.bayOverlay('bay-landing-marker', [[{ x: x - 0.13, y: y - 0.12 }, { x: x + 0.13, y: y - 0.12 }, { x: x + 0.13, y: y + 0.12 }, { x: x - 0.13, y: y + 0.12 }]], () => radii.ground + 0.012, material(0xfff1cf));
+      this.localeOverlay('bay-landing-marker', [[{ x: x - 0.13, y: y - 0.12 }, { x: x + 0.13, y: y - 0.12 }, { x: x + 0.13, y: y + 0.12 }, { x: x - 0.13, y: y + 0.12 }]], () => radii.ground + 0.012, material(0xfff1cf));
     }
     this.buildBayBakery();
   }
@@ -463,14 +476,14 @@ export class PlanetWorld {
     sides.setAttribute('position', new THREE.Float32BufferAttribute(sideVertices, 3)); sides.computeVertexNormals();
     mesh(sides, material(0xe88d5e, { side: THREE.DoubleSide }), this.root);
     for (const y of [-ramp.width / 2, ramp.width / 2 - 0.105]) {
-      this.bayOverlay('bay-ramp-edge', [[{ x: ramp.base.x, y }, { x: ramp.lip.x, y }, { x: ramp.lip.x, y: y + 0.105 }, { x: ramp.base.x, y: y + 0.105 }]], p => level.rampRadiusAt(p.x) + 0.008, material(PALETTE.orange));
+      this.localeOverlay('bay-ramp-edge', [[{ x: ramp.base.x, y }, { x: ramp.lip.x, y }, { x: ramp.lip.x, y: y + 0.105 }, { x: ramp.base.x, y: y + 0.105 }]], p => level.rampRadiusAt(p.x) + 0.008, material(PALETTE.orange));
     }
-    this.bayOverlay('bay-ramp-lip', [[{ x: ramp.lip.x - 0.10, y: -ramp.width / 2 }, { x: ramp.lip.x, y: -ramp.width / 2 }, { x: ramp.lip.x, y: ramp.width / 2 }, { x: ramp.lip.x - 0.10, y: ramp.width / 2 }]], p => level.rampRadiusAt(p.x) + 0.012, material(0xffffff));
+    this.localeOverlay('bay-ramp-lip', [[{ x: ramp.lip.x - 0.10, y: -ramp.width / 2 }, { x: ramp.lip.x, y: -ramp.width / 2 }, { x: ramp.lip.x, y: ramp.width / 2 }, { x: ramp.lip.x - 0.10, y: ramp.width / 2 }]], p => level.rampRadiusAt(p.x) + 0.012, material(0xffffff));
   }
 
   private buildBayBakery() {
     const authored = BAY_LEVEL.bakery;
-    const bakery = this.bayFrame(authored.center, authored.facing);
+    const bakery = this.localeFrame(authored.center, authored.facing);
     bakery.name = 'bay-bakery';
     this.root.add(bakery);
     const wall = material(0xf2ce9c), trim = material(PALETTE.cream), wood = material(0x76604c);
@@ -493,7 +506,7 @@ export class PlanetWorld {
       const stripe = mesh(new THREE.BoxGeometry(0.11, 0.09, 0.63), trim, bakery, i * 0.24, 1.20, 0.95, false);
       stripe.rotation.x = 0.12;
     }
-    this.bayPlaque(bakery, 'SUNRISE BAKERY', 1.68, 0.29, 1.58, 0.82);
+    this.localePlaque(bakery, 'SUNRISE BAKERY', 1.68, 0.29, 1.58, 0.82);
     for (const x of [-0.8, 0.8]) {
       mesh(new THREE.BoxGeometry(0.32, 0.22, 0.29), material(0xb17f62), bakery, x, 0.13, 0.91);
       for (const dx of [-0.08, 0.08]) {
@@ -545,6 +558,100 @@ export class PlanetWorld {
     this.resetBayDelivery();
   }
 
+  private buildStationLocale() {
+    const level = this.stationLevel!, data = STATION_LEVEL, radii = data.surfaceRadii;
+    this.localeOverlay('station-land', [data.landPolygon], () => radii.ground, material(PALETTE.grass, { roughness: 1 }));
+    const pad = Array.from({ length: 64 }, (_, i) => ({
+      x: Math.cos(i / 64 * Math.PI * 2) * data.pad.radius,
+      y: Math.sin(i / 64 * Math.PI * 2) * data.pad.radius,
+    }));
+    this.localeOverlay('station-road', [...Object.values(data.roads).map(road => road.polygon), pad], () => radii.road, material(PALETTE.road, { roughness: 0.96 }));
+    for (const arrow of data.arrows) this.localeArrow(arrow.position, arrow.direction, 0.8, arrow.route === 'outer' ? 0x4d927c : PALETTE.orange);
+    for (const x of [-7.3, -7, -6.7]) {
+      this.localeOverlay('station-brake-marking', [[{ x, y: -0.54 }, { x: x + 0.11, y: -0.54 }, { x: x + 0.11, y: 0.54 }, { x, y: 0.54 }]], () => radii.road + 0.013, material(PALETTE.orange));
+    }
+    const sign = this.localeFrame({ x: -8.3, y: 1.3 }, { x: -10, y: 1.3 });
+    sign.name = 'station-fork-sign';
+    mesh(new THREE.BoxGeometry(0.1, 1.35, 0.1), material(0x866b51), sign, 0, 0.675);
+    this.localePlaque(sign, 'OUTER ROAD', 1.3, 0.25, 1.25, 0.04, '#427760');
+    this.localePlaque(sign, 'INNER LANE', 1.3, 0.25, 0.9, 0.04, '#ad6245');
+    for (const [height, color, angle] of [[1.25, 0x589880, -Math.PI / 2], [0.9, PALETTE.orange, 0]]) {
+      const arrow = mesh(new THREE.ConeGeometry(0.13, 0.25, 3), material(color), sign, 0.85, height, 0.04);
+      arrow.rotation.z = angle;
+    }
+    this.root.add(sign);
+
+    for (const [index, obstacle] of data.obstacles.entries()) {
+      const group = this.localeFrame(obstacle.center, { x: obstacle.center.x, y: obstacle.center.y + 1 });
+      group.name = `station-obstacle-${index}`;
+      const r = obstacle.radius;
+      if (obstacle.kind === 'rock') {
+        mesh(new THREE.CylinderGeometry(r * 0.64, r, r * 0.8, 7), material(0x96a99e), group, 0, r * 0.4);
+        mesh(new THREE.IcosahedronGeometry(r * 0.64, 0), material(0xadc1ad), group, 0.04, r * 0.72).scale.y = 0.5;
+      } else {
+        mesh(new THREE.CylinderGeometry(r, r * 0.94, 0.34, 18), material(0xd5bf9d), group, 0, 0.17);
+        mesh(new THREE.CylinderGeometry(r * 0.9, r * 0.9, 0.05, 18), material(0x738b6b), group, 0, 0.36);
+        for (let i = 0; i < 6; i++) {
+          const angle = i / 6 * Math.PI * 2;
+          const x = Math.cos(angle) * r * 0.52, z = Math.sin(angle) * r * 0.52;
+          mesh(new THREE.IcosahedronGeometry(r * 0.27, 0), material(PALETTE.leaf), group, x, 0.55, z);
+          mesh(new THREE.IcosahedronGeometry(0.08, 0), material(i % 2 ? 0xf6b87b : 0xc6b6ea), group, x, 0.77, z, false);
+        }
+      }
+      this.root.add(group);
+      this.colliders.push({ normal: level.toNormal(obstacle.center.x, obstacle.center.y), radius: r });
+    }
+    this.buildStationObservatory();
+  }
+
+  private buildStationObservatory() {
+    const authored = STATION_LEVEL.station;
+    const station = this.localeFrame(authored.center, authored.facing);
+    station.name = 'station-observatory';
+    this.root.add(station);
+    const cream = material(PALETTE.cream), wood = material(0x6b6155), purple = material(0xb1a6c8);
+    mesh(new THREE.CylinderGeometry(0.97, 1.06, 0.12, 20), cream, station, 0, 0.06);
+    mesh(new THREE.CylinderGeometry(0.9, 0.96, 1.05, 20), material(0xeedccc), station, 0, 0.58);
+    mesh(new THREE.BoxGeometry(0.48, 0.7, 0.08), material(0x728b91), station, 0, 0.42, 0.92);
+    this.localePlaque(station, 'STARGAZE STATION', 1.9, 0.28, 1.02, 1.04, '#665879');
+    const animation = new THREE.Group();
+    animation.name = 'station-observatory-animation'; station.add(animation);
+    const lampMaterial = material(0xffe5ac, { emissive: 0xffc56a, emissiveIntensity: 0.18 }).clone();
+    for (const x of [-0.64, 0.64]) {
+      mesh(new THREE.BoxGeometry(0.31, 0.37, 0.09), cream, station, x, 0.65, 0.68);
+      const window = mesh(new THREE.BoxGeometry(0.23, 0.29, 0.10), lampMaterial, animation, x, 0.65, 0.74, false);
+      window.name = 'station-warm-window';
+    }
+    mesh(new THREE.CylinderGeometry(0.035, 0.035, 1.25, 8), wood, station, 1.05, 0.625, 0.55);
+    mesh(new THREE.SphereGeometry(0.16, 10, 8), lampMaterial, animation, 1.05, 1.31, 0.55, false);
+    const telescope = new THREE.Group(); telescope.name = 'station-telescope'; telescope.position.y = 1.08;
+    animation.add(telescope);
+    mesh(new THREE.SphereGeometry(0.92, 18, 10, 0, Math.PI * 2, 0, Math.PI / 2), material(0x929db4, { metalness: 0.22 }), telescope);
+    const barrel = mesh(new THREE.CylinderGeometry(0.16, 0.2, 1.1, 12), material(0x526879), telescope, 0, 0.56, 0.43);
+    barrel.rotation.x = 0.9;
+    const lens = mesh(new THREE.CylinderGeometry(0.135, 0.135, 0.025, 12), material(0x9bd9d1, { metalness: 0.25 }), telescope, 0, 0.91, 0.87, false);
+    lens.rotation.x = 0.9;
+
+    const recipient = new THREE.Group(); recipient.name = 'station-recipient'; animation.add(recipient);
+    const skin = material(0xe7ad7b);
+    mesh(new THREE.CylinderGeometry(0.13, 0.18, 0.36, 7), purple, recipient, 0, 0.36);
+    mesh(new THREE.BoxGeometry(0.23, 0.08, 0.08), cream, recipient, 0, 0.51, 0.13);
+    for (const x of [-0.09, 0.09]) mesh(new THREE.BoxGeometry(0.10, 0.14, 0.17), wood, recipient, x, 0.09, 0.04);
+    mesh(new THREE.SphereGeometry(0.17, 10, 8), skin, recipient, 0, 0.68);
+    mesh(new THREE.SphereGeometry(0.18, 10, 6, 0, Math.PI * 2, 0, Math.PI / 2), purple, recipient, 0, 0.75);
+    for (const x of [-0.057, 0.057]) mesh(new THREE.SphereGeometry(0.019, 6, 5), material(0x52473f), recipient, x, 0.70, 0.16, false);
+    const arm = new THREE.Group(); arm.name = 'station-recipient-wave'; arm.position.set(-0.16, 0.51, 0); recipient.add(arm);
+    mesh(new THREE.CylinderGeometry(0.05, 0.065, 0.26, 6), purple, arm, -0.045, 0.11);
+    mesh(new THREE.SphereGeometry(0.061, 8, 6), skin, arm, -0.045, 0.27);
+    const holdingArm = mesh(new THREE.CylinderGeometry(0.05, 0.06, 0.24, 6), purple, recipient, 0.17, 0.43, 0.13);
+    holdingArm.rotation.x = -0.95;
+    const parcel = new THREE.Group(); parcel.name = 'station-handoff-parcel'; animation.add(parcel);
+    mesh(new THREE.BoxGeometry(0.34, 0.24, 0.09), cream, parcel);
+    mesh(new THREE.BoxGeometry(0.08, 0.065, 0.015), purple, parcel, 0.09, 0.055, 0.053, false);
+    this.stationReaction = new StationDeliveryReaction(animation, recipient, arm, parcel, telescope, lampMaterial, this.reducedMotion);
+    this.colliders.push({ normal: this.stationLevel!.toNormal(authored.center.x, authored.center.y), radius: authored.colliderRadius });
+  }
+
   private buildNature() {
     const trunkGeo = new THREE.CylinderGeometry(0.07, 0.1, 0.64, 5);
     const foliageGeo = new THREE.IcosahedronGeometry(0.45, 0);
@@ -557,7 +664,7 @@ export class PlanetWorld {
     let rockIndex = 0;
     for (let i = 0; i < 430; i++) {
       const n = spherical(Math.asin(this.random() * 2 - 1) * 180 / Math.PI, this.random() * 360 - 180);
-      if (this.bayLevel?.isInSceneryClearance(n) || this.terrain(n) < -0.02 || this.nearRoad(n, 1.05) || this.colliders.some(c => surfaceDistance(n, c.normal) < c.radius + 0.9) || this.destinations.some(d => surfaceDistance(n, d.normal) < 1.9)) continue;
+      if (this.authoredLevel?.isInSceneryClearance(n) || this.terrain(n) < -0.02 || this.nearRoad(n, 1.05) || this.colliders.some(c => surfaceDistance(n, c.normal) < c.radius + 0.9) || this.destinations.some(d => surfaceDistance(n, d.normal) < 1.9)) continue;
       const group = align(n);
       const s = 0.6 + this.random() * 0.8;
       group.scale.setScalar(s);
@@ -578,7 +685,7 @@ export class PlanetWorld {
     }
     for (let i = 0; i < 300 && rockIndex < 65; i++) {
       const n = spherical(this.random() * 150 - 75, this.random() * 360 - 180);
-      if (this.bayLevel?.isInSceneryClearance(n) || this.terrain(n) < -0.07 || this.nearRoad(n) || this.destinations.some(d => surfaceDistance(n, d.normal) < 2)) continue;
+      if (this.authoredLevel?.isInSceneryClearance(n) || this.terrain(n) < -0.07 || this.nearRoad(n) || this.destinations.some(d => surfaceDistance(n, d.normal) < 2)) continue;
       dummy.position.copy(n).multiplyScalar(R + 0.07);
       dummy.quaternion.setFromUnitVectors(UP, n);
       dummy.scale.set(0.5 + this.random(), 0.5, 0.5 + this.random());
@@ -593,7 +700,7 @@ export class PlanetWorld {
     const waveMat = material(0xa0d4c9, { transparent: true, opacity: 0.38 });
     for (let i = 0; i < 240; i++) {
       const n = spherical(this.random() * 170 - 85, this.random() * 360 - 180);
-      if (this.bayLevel?.isInSceneryClearance(n) || this.terrain(n) > -0.28 || this.nearRoad(n, 0.6)) continue;
+      if (this.authoredLevel?.isInSceneryClearance(n) || this.terrain(n) > -0.28 || this.nearRoad(n, 0.6)) continue;
       const wave = align(n, R + 0.025);
       mesh(waveGeo, waveMat, wave, 0, 0, 0, false);
       mesh(waveGeo, waveMat, wave, 0.12, 0, 0.12, false).scale.x = 0.6;
@@ -618,8 +725,8 @@ export class PlanetWorld {
 
   private buildTargets() {
     this.destinations.forEach((destination, i) => {
-      const station = align(destination.normal, this.bayLevel ? BAY_LEVEL.surfaceRadii.road : R + 0.11);
-      if (!this.bayLevel) {
+      const station = align(destination.normal, this.authoredLevel ? this.authoredLevel.definition.surfaceRadii.road : R + 0.11);
+      if (!this.authoredLevel) {
         const base = mesh(new THREE.CylinderGeometry(0.87, 0.87, 0.03, 40), material(0xc5bc9c), station, 0, 0.01, 0, false);
         base.receiveShadow = true;
       }
@@ -675,6 +782,21 @@ export class PlanetWorld {
       const velocity = new THREE.Vector3((this.random() - 0.5) * 3, 1.5 + this.random() * 2.6, (this.random() - 0.5) * 3).applyQuaternion(basis);
       this.particles.push({ mesh: piece, velocity, life: 1.5 + this.random() * 0.5 });
     }
+  }
+
+  startDelivery(parcelStart: THREE.Vector3, index = 0): void {
+    if (index !== 0 || !this.authoredLevel) return;
+    if (this.stationReaction) this.stationReaction.start(parcelStart);
+    else this.startBayDelivery(parcelStart);
+  }
+
+  resetDelivery(): void {
+    this.resetBayDelivery();
+    this.stationReaction?.reset();
+  }
+
+  getDeliveryReactionSnapshot() {
+    return this.stationReaction?.snapshot() ?? this.getBayReactionSnapshot();
   }
 
   startBayDelivery(parcelStart: THREE.Vector3): void {
@@ -765,7 +887,10 @@ export class PlanetWorld {
   }
 
   update(dt: number, time: number, paused = false) {
-    if (!paused) this.updateBayDelivery(dt);
+    if (!paused) {
+      this.updateBayDelivery(dt);
+      this.stationReaction?.update(dt);
+    }
     for (const p of this.splashParticles) {
       if (p.life <= 0) continue;
       p.life -= dt;

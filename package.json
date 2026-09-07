@@ -8,7 +8,8 @@
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview --host 127.0.0.1",
     "test": "vitest run",
-    "test:browser": "playwright test"
+    "test:browser": "playwright test",
+    "test:preview": "npm run build && playwright test --config=playwright.preview.config.ts"
   },
   "dependencies": {
     "three": "^0.185.1"

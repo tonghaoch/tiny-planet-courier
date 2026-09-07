@@ -79,7 +79,7 @@ h1 { font-family: Georgia, "Times New Roman", serif; font-weight: 400; font-size
 .ticket-count strong { font: 24px/1 Consolas, monospace; }
 .ticket-count small { font: 9px/1.6 "Segoe UI", sans-serif; }
 .ticket-bottom { display: flex; align-items: center; justify-content: space-between; color: #a7b5aa; font-size: 9px; letter-spacing: .3px; }
-.ticket-bottom > span { color: #768c84; font-size: 8px; }
+.ticket-bottom > span:last-child { color: #768c84; font-size: 8px; }
 .planet-note { position: absolute; left: 73.2%; top: 77%; display: flex; align-items: flex-start; gap: 15px; }
 .note-line { display: block; position: absolute; right: calc(100% + 5px); top: 8px; width: 48px; height: 1px; background: #c1c8af50; transform: rotate(-35deg); transform-origin: right; }
 .note-line:before { content: ''; position: absolute; left: 0; top: -2px; width: 5px; height: 5px; border: 1px solid #a2b5a3; border-radius: 50%; }
@@ -290,11 +290,12 @@ h1 { font-family: Georgia, "Times New Roman", serif; font-weight: 400; font-size
   .delivery-queue { bottom: 134px; }
 }
 @media (max-width: 360px) {
+  .touch-controls { left: 14px; right: 14px; }
   .driving-console { gap: 10px; padding: 12px 10px; }
   .speed-readout { gap: 7px; }
   .boost-readout { width: 66px; }
 }
-#app[data-prototype="bay"][data-delivered="true"] .mission-card { display: none; }
+#app:is([data-prototype="bay"], [data-prototype="station"])[data-delivered="true"] .mission-card { display: none; }
 .bay-result { position: absolute; z-index: 5; left: 4.3%; top: 130px; width: 275px; padding: 23px; border: 1px solid #d7c5a343; border-radius: 9px; background: linear-gradient(145deg, #23433fe8, #142f35e8); backdrop-filter: blur(12px); box-shadow: 0 12px 44px #061d2324; pointer-events: none; }
 .bay-result-top { display: flex; align-items: center; gap: 9px; color: var(--coral); font: 7px Consolas, monospace; letter-spacing: 1.1px; }
 .bay-result-top svg { width: 20px; height: 20px; }
@@ -309,7 +310,7 @@ h1 { font-family: Georgia, "Times New Roman", serif; font-weight: 400; font-size
 .bay-result .start-button > svg { width: 17px; margin-left: 0; }
 .bay-result-caption { display: block; margin-top: 11px; color: #8faa99; font-size: 8px; text-align: center; }
 @media (max-width: 760px) {
-  .bay-result { left: 5%; right: 5%; top: auto; bottom: 114px; width: auto; padding: 14px; display: grid; grid-template-columns: 1fr auto; column-gap: 14px; row-gap: 4px; }
+  .bay-result { left: 5%; right: 5%; top: auto; bottom: max(114px, calc(env(safe-area-inset-bottom) + 94px)); width: auto; padding: 14px; display: grid; grid-template-columns: minmax(0, 1fr) auto; column-gap: 14px; row-gap: 4px; }
   .bay-result-top { grid-column: 1 / -1; font-size: 6px; }
   .bay-result-top svg { width: 15px; height: 15px; }
   .bay-result h2 { grid-column: 1; font-size: 18px; line-height: 1.15; margin: 6px 0; }
@@ -319,8 +320,8 @@ h1 { font-family: Georgia, "Times New Roman", serif; font-weight: 400; font-size
   .bay-result-times small { font-size: 7px; }
   .bay-record-label { grid-column: 1 / -1; font-size: 8px; }
   .bay-result .start-button { grid-column: 1 / -1; margin-top: 6px; min-height: 36px; }
-  #app[data-prototype="bay"][data-delivered="true"] .driving-console,
-  #app[data-prototype="bay"][data-delivered="true"] .delivery-queue { display: none; }
+  #app:is([data-prototype="bay"], [data-prototype="station"])[data-delivered="true"] .driving-console,
+  #app:is([data-prototype="bay"], [data-prototype="station"])[data-delivered="true"] .delivery-queue { display: none; }
 }
 @media (max-width: 360px) {
   .bay-result-times > div:last-child { display: none; }

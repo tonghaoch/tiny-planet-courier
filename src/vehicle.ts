@@ -188,6 +188,8 @@ export class Vehicle {
       this.predictionClock = 0;
       this.landingMarker.visible = false;
       this.airShadow.visible = false;
+      this.pullDriveState();
+      this.syncVisual(0, this.visualTime);
       return;
     }
     this.altitude = 0;

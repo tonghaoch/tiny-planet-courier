@@ -1,0 +1,108 @@
+export type PrototypeId = 'bay' | 'station';
+
+/** Authored playtest identity and copy only; scene construction stays outside the UI. */
+export interface PrototypeDefinition {
+  readonly id: PrototypeId;
+  readonly bestScoreKey: string;
+  readonly name: string;
+  readonly destinationName: string;
+  readonly parcelDescription: string;
+  readonly home: {
+    readonly eyebrow: string;
+    readonly title: string;
+    readonly description: string;
+    readonly ticketHeading: string;
+    readonly place: string;
+    readonly code: string;
+    readonly parcelLabel: string;
+    readonly ticketDetail: string;
+  };
+  readonly hints: {
+    readonly start: string;
+    readonly recovery: string;
+    readonly choice: string;
+    readonly outer: string;
+    readonly inner: string;
+    readonly nearDestination: string;
+  };
+  readonly result: {
+    readonly heading: string;
+    readonly description: string;
+    readonly bestLabel: string;
+    readonly newRecord: string;
+    readonly delivered: string;
+  };
+}
+
+export const PROTOTYPES: Readonly<Record<PrototypeId, PrototypeDefinition>> = {
+  bay: {
+    id: 'bay',
+    bestScoreKey: 'tiny-planet-courier:bay-leap:best:v1',
+    name: 'Bay Leap',
+    destinationName: 'Sunrise Bakery',
+    parcelDescription: 'Warm croissants',
+    home: {
+      eyebrow: 'BAY LEAP · A LITTLE PLAYTEST',
+      title: 'A little leap.<br>A big <span class="warm-word">smile.</span>',
+      description: 'One warm parcel. Two ways across the bay.<br>Take the coast road—or boost off the ramp.',
+      ticketHeading: 'ONE BAY · TWO WAYS',
+      place: 'Sunrise Bay',
+      code: 'BAY-01',
+      parcelLabel: 'warm parcel',
+      ticketDetail: 'Warm croissants ↗',
+    },
+    hints: {
+      start: 'Coast road for a cruise. Hold boost for the ramp.',
+      recovery: 'Ready for another go. Boost before the ramp—or take the coast.',
+      choice: 'Coast road, or hold boost off the ramp.',
+      outer: 'Enjoy the coast. Follow the pale road.',
+      inner: 'Hold boost. Keep it straight.',
+      nearDestination: 'Bakery ahead. Brake before the glow.',
+    },
+    result: {
+      heading: 'Good morning,<br>Sunrise Bakery.',
+      description: 'The parcel is home. Stay for the view.',
+      bestLabel: 'Bay best',
+      newRecord: 'A new bay best. Nicely delivered!',
+      delivered: 'Delivered to Sunrise Bakery. Thank you!',
+    },
+  },
+  station: {
+    id: 'station',
+    bestScoreKey: 'tiny-planet-courier:station:best:v1',
+    name: 'Stargaze',
+    destinationName: 'Stargaze Station',
+    parcelDescription: 'A letter from Earth',
+    home: {
+      eyebrow: 'STARGAZE · A LITTLE PLAYTEST',
+      title: 'A little turn.<br>A big <span class="warm-word">hello.</span>',
+      description: 'One parcel. Two ways to Stargaze Station.<br>Cruise the outer road—or brake into the inner bends.',
+      ticketHeading: 'ONE STATION · TWO WAYS',
+      place: 'Stargaze Station',
+      code: 'STAR-01',
+      parcelLabel: 'little letter',
+      ticketDetail: 'A letter from Earth ↗',
+    },
+    hints: {
+      start: 'Outer road for wide turns. Inner lane? Brake early and turn gently.',
+      recovery: 'Back on the road. Your parcel is safe.',
+      choice: 'Take the outer road, or brake into the tighter inner lane.',
+      outer: 'Outer road. Wide turns; brake before the station.',
+      inner: 'Inner lane. Brake early for the tight turns.',
+      nearDestination: 'Station ahead. Brake before the glow.',
+    },
+    result: {
+      heading: 'Special delivery,<br>Stargaze Station.',
+      description: 'A letter from Earth, safely delivered. Stay for the view.',
+      bestLabel: 'Station best',
+      newRecord: 'A new station best. Nicely delivered!',
+      delivered: 'Delivered to Stargaze Station. Thank you!',
+    },
+  },
+};
+
+export function selectPrototype(search: string, development: boolean): PrototypeDefinition | null {
+  if (!development) return null;
+  const id = new URLSearchParams(search).get('prototype');
+  return id === 'bay' || id === 'station' ? PROTOTYPES[id] : null;
+}
