@@ -44,6 +44,21 @@ npm run dev
 
 Open the local URL printed in the terminal, usually **http://127.0.0.1:5173**. The development server only listens on your computer by default. The game has touch controls and a mobile layout, but accessing your computer's development server from a phone requires configuring access over a trusted local network.
 
+### Bay Leap playtest — development only
+
+Open **http://127.0.0.1:5173/?prototype=bay** for the experimental one-parcel route. The regular local URL still runs the original three-delivery game, so you can compare the two.
+
+- Take the pale **coast road** for a relaxed delivery, or carry **W + Space** into the ramp for a leap across the bay.
+- Boost no longer makes the van hop on flat ground in this prototype. The ramp launches the van; small steering corrections in the air move the landing guide.
+- Aim for the sandy landing area, then **brake with S** before parking at Sunrise Bakery.
+- Bay water is not drivable. A splash returns you to a safe approach with your parcel intact; **R** also returns you there for a quick retry.
+- The bakery reacts to your delivery in the world. A small result card appears without taking away driving control; **Try another route** resets the parcel, bakery, and clock.
+- Sound is optional. When enabled, the engine, wind, boost, and landing sounds provide extra driving feedback.
+
+The prototype has its own best-time record. Its entry is available only in Vite development mode; production builds and the current live game retain the original route. Development is checkpointed on `prototype/bay-leap`; it has not been merged into `main` or deployed.
+
+See the [iteration plan and handoff](docs/iteration-plan.md) for a fresh-computer setup, completed work, verification results, and the next playtest decisions.
+
 ## How to play
 
 | Action | Controls |

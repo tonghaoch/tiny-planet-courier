@@ -40,8 +40,21 @@ describe('spherical movement', () => {
   it('reports right and left targets with matching steering signs', () => {
     const normal = spherical(0, 0);
     const forward = new Vector3(0, 1, 0);
-    expect(headingTo(normal, forward, spherical(0, -20))).toBeCloseTo(Math.PI / 2);
-    expect(headingTo(normal, forward, spherical(0, 20))).toBeCloseTo(-Math.PI / 2);
+    expect(headingTo(normal, forward, spherical(0, -20))).toBeCloseTo(-Math.PI / 2);
+    expect(headingTo(normal, forward, spherical(0, 20))).toBeCloseTo(Math.PI / 2);
+  });
+
+  it('turning toward the navigation arrow reduces heading error', () => {
+    for (const normal of [spherical(0, 0), spherical(80, 170), spherical(-70, -120)]) {
+      const forward = tangent(new Vector3(1, 0, 0), normal);
+      for (const side of [-1, 1]) {
+        const direction = forward.clone().applyAxisAngle(normal, -side * 0.9);
+        const target = normal.clone().multiplyScalar(Math.cos(0.4)).addScaledVector(direction, Math.sin(0.4));
+        const before = headingTo(normal, forward, target);
+        const steered = forward.clone().applyAxisAngle(normal, -Math.sign(before) * 0.1);
+        expect(Math.abs(headingTo(normal, steered, target))).toBeLessThan(Math.abs(before));
+      }
+    }
   });
 
   it('clamps dot products for stable distances', () => {

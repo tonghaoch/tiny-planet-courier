@@ -48,7 +48,7 @@ export function advanceOnSphere(normal: Vector3, forward: Vector3, distance: num
 
 export function headingTo(normal: Vector3, forward: Vector3, target: Vector3): number {
   const toTarget = tangent(target, normal);
-  const right = new Vector3().crossVectors(normal, forward).normalize();
+  const right = new Vector3().crossVectors(forward, normal).normalize();
   return Math.atan2(toTarget.dot(right), toTarget.dot(forward));
 }
 

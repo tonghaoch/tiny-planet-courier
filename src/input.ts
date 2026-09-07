@@ -11,9 +11,9 @@ export class Input {
       if (event.target instanceof HTMLElement && ['INPUT', 'TEXTAREA', 'SELECT'].includes(event.target.tagName)) return;
       if (event.code === 'Escape' && !event.repeat) { pause(); return; }
       if (!isPlaying()) return;
-      if (this.gameplayKeys.has(event.code)) event.preventDefault();
       // Native buttons still respond to keyboard activation; do not drive while focusing them.
       if (event.code === 'Space' && event.target instanceof HTMLButtonElement) return;
+      if (this.gameplayKeys.has(event.code)) event.preventDefault();
       this.keys.add(event.code);
       if (event.code === 'KeyR' && !event.repeat) recover();
     });

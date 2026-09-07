@@ -13,7 +13,7 @@ export class DeliveryRun {
   elapsed = 0;
   parkedFor = 0;
 
-  constructor(readonly destinations: Destination[]) {}
+  constructor(readonly destinations: Destination[], readonly options: { keepDrivingOnFinish?: boolean } = {}) {}
 
   start() {
     this.mode = 'playing';
@@ -26,17 +26,18 @@ export class DeliveryRun {
   resume() { if (this.mode === 'paused') this.mode = 'playing'; }
   home() { this.mode = 'home'; this.parkedFor = 0; }
   get target(): Destination | undefined { return this.destinations[this.index]; }
+  get finished(): boolean { return this.destinations.length > 0 && this.index === this.destinations.length; }
 
-  update(dt: number, normal: Vector3, speed: number, altitude = 0): DeliveryEvent | null {
+  update(dt: number, normal: Vector3, speed: number, altitude = 0, grounded = true): DeliveryEvent | null {
     if (this.mode !== 'playing' || !this.target || !Number.isFinite(dt) || dt <= 0) return null;
     this.elapsed += dt;
-    const canDeliver = surfaceDistance(normal, this.target.normal) < DELIVERY_RADIUS && Math.abs(speed) < DELIVERY_SPEED && altitude < 0.2;
+    const canDeliver = grounded && surfaceDistance(normal, this.target.normal) < DELIVERY_RADIUS && Math.abs(speed) < DELIVERY_SPEED && altitude < 0.2;
     this.parkedFor = canDeliver ? this.parkedFor + dt : 0;
     if (this.parkedFor < DELIVERY_HOLD) return null;
     const index = this.index++;
     this.parkedFor = 0;
     const finished = this.index === this.destinations.length;
-    if (finished) this.mode = 'complete';
+    if (finished && !this.options.keepDrivingOnFinish) this.mode = 'complete';
     return { index, finished };
   }
 }
@@ -49,18 +50,19 @@ export function formatTime(seconds: number, precise = false): string {
 }
 
 const RECORD_KEY = 'tiny-planet-courier:best:v1';
-export function readBest(): number | null {
+export const BAY_RECORD_KEY = 'tiny-planet-courier:bay-leap:best:v1';
+export function readBest(key = RECORD_KEY): number | null {
   try {
-    const raw = localStorage.getItem(RECORD_KEY);
+    const raw = localStorage.getItem(key);
     if (raw === null) return null;
     const value = Number(raw);
     return Number.isFinite(value) && value > 0 ? value : null;
   } catch { return null; }
 }
 
-export function saveBest(time: number): boolean {
+export function saveBest(time: number, key = RECORD_KEY): boolean {
   if (!Number.isFinite(time) || time <= 0) return false;
-  const old = readBest();
+  const old = readBest(key);
   if (old !== null && time >= old) return false;
-  try { localStorage.setItem(RECORD_KEY, String(time)); return true; } catch { return false; }
+  try { localStorage.setItem(key, String(time)); return true; } catch { return false; }
 }

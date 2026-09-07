@@ -4,3 +4,4 @@ playwright-report/
 test-results/
 artifacts/
 .vite/
+.claude/worktrees/

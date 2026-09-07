@@ -1,6 +1,8 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { PLANET_RADIUS as R, UP, seededRandom, spherical, surfaceDistance, type Collider, type Destination } from './math';
+import { BAY_LEVEL, BayLevel, inBayPolygon, type BayPoint } from './bay-level';
+import type { BayEnvironment } from './bay-types';
 
 const PALETTE = { ocean: 0x387f8b, shallow: 0x70baa9, sand: 0xe4cf9f, grass: 0x88b99b, leaf: 0x568a76, darkLeaf: 0x326f62, road: 0xe8d9b8, orange: 0xf49869, cream: 0xffebcb };
 const materials = new Map<string, THREE.MeshStandardMaterial>();
@@ -40,9 +42,23 @@ function interpolateRoad(nodes: THREE.Vector3[], count: number): THREE.Vector3[]
   return curve.getPoints(count).map(p => p.normalize());
 }
 
+interface BakeryReaction {
+  root: THREE.Group;
+  hinge: THREE.Group;
+  recipient: THREE.Group;
+  arm: THREE.Group;
+  parcel: THREE.Group;
+  windowMaterial: THREE.MeshStandardMaterial;
+  parcelStartWorld: THREE.Vector3;
+  elapsed: number;
+  started: boolean;
+}
+
 export class PlanetWorld {
   readonly root = new THREE.Group();
   readonly colliders: Collider[] = [];
+  readonly bayLevel: BayLevel | null;
+  readonly bayEnvironment: BayEnvironment | null;
   readonly destinations: Destination[] = [
     { id: 'bakery', name: 'Sunrise Bakery', label: 'SUNRISE BAKERY', parcel: 'A bag of warm croissants', normal: spherical(30, 28), color: 0xf6b87b },
     { id: 'observatory', name: 'Stargaze Station', label: 'STARGAZE STATION', parcel: 'A letter from Earth', normal: spherical(-10, 85), color: 0xc6b6ea },
@@ -59,11 +75,25 @@ export class PlanetWorld {
   private readonly parcelGeometry = new THREE.BoxGeometry(0.42, 0.42, 0.42);
   private readonly particleGeometry = new THREE.BoxGeometry(0.10, 0.10, 0.10);
   private readonly particleMaterials = [material(0xf6ba78), material(0xffffff), material(0xa4e1b4)];
+  private readonly splashMaterials = [material(0x81d8e0), material(0x459eb9), material(0xd8f4e8)];
+  private readonly splashParticles: { mesh: THREE.Mesh; velocity: THREE.Vector3; life: number }[] = [];
+  private bakeryReaction: BakeryReaction | null = null;
 
-  constructor() {
+  constructor(bayPrototype = false, private readonly reducedMotion = false) {
+    this.bayLevel = bayPrototype ? new BayLevel() : null;
+    const level = this.bayLevel;
+    this.bayEnvironment = level ? {
+      spawnPose: level.spawnPose,
+      recoveryPose: level.recoveryPose,
+      colliders: this.colliders,
+      sampleSurface: normal => level.sampleSurface(normal),
+      crossRampLip: (previous, next) => level.crossRampLip(previous, next),
+    } : null;
+    if (level) this.destinations = [level.destination];
     this.buildPlanet();
     this.buildRoads();
     this.buildSettlements();
+    if (level) this.buildBayLocale();
     this.buildNature();
     this.buildClouds();
     this.buildTargets();
@@ -74,6 +104,9 @@ export class PlanetWorld {
 
   private batchStaticScenery() {
     const animated = new Set<THREE.Object3D>([this.clouds, ...this.turbines, ...this.targetGroups]);
+    // Register the ancestor BEFORE collecting batches: doors, limbs, parcel and windows
+    // must keep their transforms/material ownership through every replay.
+    if (this.bakeryReaction) animated.add(this.bakeryReaction.root);
     const batches = new Map<string, THREE.Mesh<THREE.BufferGeometry, THREE.MeshStandardMaterial>[]>();
     this.root.updateMatrixWorld(true);
     this.root.traverse(object => {
@@ -104,7 +137,7 @@ export class PlanetWorld {
     }
   }
 
-  heightAt(_normal: THREE.Vector3): number { return R + 0.105; }
+  heightAt(normal: THREE.Vector3): number { return this.bayLevel ? this.bayLevel.sampleSurface(normal).radius : R + 0.105; }
 
   private terrain(n: THREE.Vector3): number {
     return Math.sin(n.x * 4.8 + n.z * 2.7) * 0.44 + Math.cos(n.y * 5.2 - n.x * 2) * 0.38 + Math.sin(n.z * 8 + n.y * 3) * 0.17;
@@ -146,11 +179,13 @@ export class PlanetWorld {
         const leftPoint = n.clone().multiplyScalar(R + 0.075).addScaledVector(right, -0.52).normalize().multiplyScalar(R + 0.085);
         const rightPoint = n.clone().multiplyScalar(R + 0.075).addScaledVector(right, 0.52).normalize().multiplyScalar(R + 0.085);
         vertices.push(...leftPoint.toArray(), ...rightPoint.toArray());
-        if (i < normals.length - 1) {
+        const next = normals[Math.min(i + 1, normals.length - 1)];
+        const clipped = this.bayLevel && [n, next, n.clone().add(next).normalize()].some(p => this.bayLevel!.isInSceneryClearance(p));
+        if (i < normals.length - 1 && !clipped) {
           const k = i * 2;
           indices.push(k, k + 1, k + 2, k + 1, k + 3, k + 2);
         }
-        if (i % 3 === 0) {
+        if (i % 3 === 0 && !clipped) {
           const stripe = align(n, R + 0.103);
           const dash = mesh(new THREE.BoxGeometry(0.045, 0.008, 0.2), stripeMat, stripe, 0, 0, 0, false);
           const localForward = forward.normalize().applyQuaternion(stripe.quaternion.clone().invert());
@@ -173,6 +208,7 @@ export class PlanetWorld {
   }
 
   private house(n: THREE.Vector3, color: number, scale = 1, style = 0) {
+    if (this.bayLevel?.isInSceneryClearance(n, Math.max(BAY_LEVEL.sceneryClearance, scale))) return;
     const group = align(n);
     group.rotateY(this.random() * Math.PI * 2);
     const wall = material(color);
@@ -216,39 +252,297 @@ export class PlanetWorld {
     this.house(spherical(-43, 95), 0xe5b8ac, 0.95, 2);
     this.house(spherical(53, -62), 0xe7d1a8, 1.0, 0);
 
-    const windmill = align(spherical(54, -47));
-    mesh(new THREE.CylinderGeometry(0.31, 0.49, 1.9, 8), material(0xeedbbe), windmill, 0, 0.95);
-    mesh(new THREE.ConeGeometry(0.54, 0.60, 8), material(0xbb866c), windmill, 0, 2.15);
-    const rotor = new THREE.Group();
-    rotor.position.set(0, 1.75, 0.43);
-    const wingMat = material(0xffecc8);
-    for (let i = 0; i < 4; i++) {
-      const blade = new THREE.Group();
-      blade.rotation.z = i * Math.PI / 2;
-      mesh(new THREE.BoxGeometry(0.11, 1.2, 0.07), material(0x7e6954), blade, 0, 0.64, 0);
-      mesh(new THREE.BoxGeometry(0.27, 0.83, 0.06), wingMat, blade, 0.08, 0.80, 0.045);
-      rotor.add(blade);
+    if (!this.bayLevel?.isInSceneryClearance(spherical(54, -47), 1.7)) {
+      const windmill = align(spherical(54, -47));
+      mesh(new THREE.CylinderGeometry(0.31, 0.49, 1.9, 8), material(0xeedbbe), windmill, 0, 0.95);
+      mesh(new THREE.ConeGeometry(0.54, 0.60, 8), material(0xbb866c), windmill, 0, 2.15);
+      const rotor = new THREE.Group();
+      rotor.position.set(0, 1.75, 0.43);
+      const wingMat = material(0xffecc8);
+      for (let i = 0; i < 4; i++) {
+        const blade = new THREE.Group();
+        blade.rotation.z = i * Math.PI / 2;
+        mesh(new THREE.BoxGeometry(0.11, 1.2, 0.07), material(0x7e6954), blade, 0, 0.64, 0);
+        mesh(new THREE.BoxGeometry(0.27, 0.83, 0.06), wingMat, blade, 0.08, 0.80, 0.045);
+        rotor.add(blade);
+      }
+      mesh(new THREE.SphereGeometry(0.15, 8, 6), material(0xe7b98c), rotor, 0, 0, 0.08);
+      windmill.add(rotor);
+      this.turbines.push(rotor);
+      this.root.add(windmill);
+      this.colliders.push({ normal: spherical(54, -47), radius: 0.6 });
     }
-    mesh(new THREE.SphereGeometry(0.15, 8, 6), material(0xe7b98c), rotor, 0, 0, 0.08);
-    windmill.add(rotor);
-    this.turbines.push(rotor);
-    this.root.add(windmill);
-    this.colliders.push({ normal: spherical(54, -47), radius: 0.6 });
 
-    const observatory = align(spherical(-4, 92));
-    mesh(new THREE.CylinderGeometry(0.69, 0.75, 0.86, 16), material(0xeee1cd), observatory, 0, 0.46);
-    mesh(new THREE.SphereGeometry(0.72, 16, 10, 0, Math.PI * 2, 0, Math.PI / 2), material(0x8d9bad, { metalness: 0.22 }), observatory, 0, 0.88);
-    const telescope = mesh(new THREE.CylinderGeometry(0.13, 0.17, 0.89, 10), material(0x546a7a), observatory, 0.1, 1.34, 0.43);
-    telescope.rotation.x = 0.9;
-    this.root.add(observatory);
-    this.colliders.push({ normal: spherical(-4, 92), radius: 0.75 });
+    if (!this.bayLevel?.isInSceneryClearance(spherical(-4, 92))) {
+      const observatory = align(spherical(-4, 92));
+      mesh(new THREE.CylinderGeometry(0.69, 0.75, 0.86, 16), material(0xeee1cd), observatory, 0, 0.46);
+      mesh(new THREE.SphereGeometry(0.72, 16, 10, 0, Math.PI * 2, 0, Math.PI / 2), material(0x8d9bad, { metalness: 0.22 }), observatory, 0, 0.88);
+      const telescope = mesh(new THREE.CylinderGeometry(0.13, 0.17, 0.89, 10), material(0x546a7a), observatory, 0.1, 1.34, 0.43);
+      telescope.rotation.x = 0.9;
+      this.root.add(observatory);
+      this.colliders.push({ normal: spherical(-4, 92), radius: 0.75 });
+    }
 
-    const lighthouse = align(spherical(-13, -30));
-    for (let i = 0; i < 5; i++) mesh(new THREE.CylinderGeometry(0.3 - i * 0.02, 0.32 - i * 0.02, 0.36, 10), material(i % 2 ? 0xdf977d : 0xf8e6c6), lighthouse, 0, 0.18 + i * 0.36);
-    mesh(new THREE.CylinderGeometry(0.31, 0.31, 0.35, 10), material(0xffd58b, { emissive: 0xffc36d, emissiveIntensity: 0.6 }), lighthouse, 0, 1.98);
-    mesh(new THREE.ConeGeometry(0.4, 0.32, 10), material(0x61757b), lighthouse, 0, 2.31);
-    this.root.add(lighthouse);
-    this.colliders.push({ normal: spherical(-13, -30), radius: 0.5 });
+    if (!this.bayLevel?.isInSceneryClearance(spherical(-13, -30))) {
+      const lighthouse = align(spherical(-13, -30));
+      for (let i = 0; i < 5; i++) mesh(new THREE.CylinderGeometry(0.3 - i * 0.02, 0.32 - i * 0.02, 0.36, 10), material(i % 2 ? 0xdf977d : 0xf8e6c6), lighthouse, 0, 0.18 + i * 0.36);
+      mesh(new THREE.CylinderGeometry(0.31, 0.31, 0.35, 10), material(0xffd58b, { emissive: 0xffc36d, emissiveIntensity: 0.6 }), lighthouse, 0, 1.98);
+      mesh(new THREE.ConeGeometry(0.4, 0.32, 10), material(0x61757b), lighthouse, 0, 2.31);
+      this.root.add(lighthouse);
+      this.colliders.push({ normal: spherical(-13, -30), radius: 0.5 });
+    }
+  }
+
+  /** Triangulate in authored coordinates, then split every long chord before projection.
+   * Even the low water overlay stays outside the original radius between vertices.
+   */
+  private bayOverlay(name: string, polygons: readonly (readonly BayPoint[])[], radiusAt: (p: BayPoint) => number, mat: THREE.MeshStandardMaterial, colorAt?: (p: BayPoint) => THREE.Color) {
+    const level = this.bayLevel!;
+    const positions: number[] = [], colors: number[] = [];
+    const lengthSq = (a: BayPoint, b: BayPoint) => (a.x - b.x) ** 2 + (a.y - b.y) ** 2;
+    const append = (a: BayPoint, b: BayPoint, c: BayPoint) => {
+      const edges = [lengthSq(a, b), lengthSq(b, c), lengthSq(c, a)];
+      const longest = Math.max(...edges);
+      if (longest > BAY_LEVEL.overlayMaxEdge ** 2) {
+        // Longest-edge bisection avoids exploding an entire large triangle into a grid.
+        const edge = edges.indexOf(longest);
+        const [p, q, other] = edge === 0 ? [a, b, c] : edge === 1 ? [b, c, a] : [c, a, b];
+        const midpoint = { x: (p.x + q.x) / 2, y: (p.y + q.y) / 2 };
+        append(p, midpoint, other); append(midpoint, q, other);
+        return;
+      }
+      for (const p of [a, b, c]) {
+        positions.push(...level.toNormal(p.x, p.y).multiplyScalar(radiusAt(p)).toArray());
+        if (colorAt) colors.push(...colorAt(p).toArray());
+      }
+    };
+    for (const polygon of polygons) {
+      const contour = polygon.map(p => new THREE.Vector2(p.x, p.y));
+      for (const triangle of THREE.ShapeUtils.triangulateShape(contour, [])) {
+        const [a, b, c] = triangle.map(i => polygon[i]);
+        if ((b.x - a.x) * (c.y - a.y) - (b.y - a.y) * (c.x - a.x) < 0) append(a, c, b);
+        else append(a, b, c);
+      }
+    }
+    const geometry = new THREE.BufferGeometry();
+    geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+    if (colorAt) geometry.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
+    geometry.computeVertexNormals();
+    const overlay = mesh(geometry, mat, this.root, 0, 0, 0, false);
+    overlay.name = name;
+    overlay.receiveShadow = true;
+    return overlay;
+  }
+
+  private bayFrame(p: BayPoint, facing: BayPoint, radius = BAY_LEVEL.surfaceRadii.ground) {
+    const level = this.bayLevel!;
+    const normal = level.toNormal(p.x, p.y);
+    const forward = level.toNormal(facing.x, facing.y);
+    forward.addScaledVector(normal, -forward.dot(normal)).normalize();
+    const right = new THREE.Vector3().crossVectors(normal, forward).normalize();
+    const group = new THREE.Group();
+    group.position.copy(normal).multiplyScalar(radius);
+    group.quaternion.setFromRotationMatrix(new THREE.Matrix4().makeBasis(right, normal, forward));
+    return group;
+  }
+
+  private bayArrow(p: BayPoint, direction: BayPoint, scale = 1, color = PALETTE.orange) {
+    const d = Math.hypot(direction.x, direction.y);
+    const x = direction.x / d, y = direction.y / d;
+    const shape = [[-0.40, -0.12], [0.08, -0.12], [0.08, -0.28], [0.46, 0], [0.08, 0.28], [0.08, 0.12], [-0.40, 0.12]];
+    const polygon = shape.map(([a, b]) => ({ x: p.x + (x * a - y * b) * scale, y: p.y + (y * a + x * b) * scale }));
+    this.bayOverlay('bay-route-arrow', [polygon], q => this.bayLevel!.sampleSurface(this.bayLevel!.toNormal(q.x, q.y)).radius + 0.012, material(color));
+  }
+
+  /** Canvas is optional: arrows, colors and physical signboards still exist in Node. */
+  private bayPlaque(parent: THREE.Object3D, label: string, width: number, height: number, y: number, z: number, ink = '#655747') {
+    mesh(new THREE.BoxGeometry(width + 0.09, height + 0.06, 0.06), material(PALETTE.cream), parent, 0, y, z);
+    if (typeof document === 'undefined') return;
+    try {
+      const canvas = document.createElement('canvas');
+      canvas.width = 768; canvas.height = 160;
+      const context = canvas.getContext('2d');
+      if (!context) return;
+      context.fillStyle = '#ffebcb'; context.fillRect(0, 0, canvas.width, canvas.height);
+      context.fillStyle = ink; context.font = 'bold 69px sans-serif';
+      context.textAlign = 'center'; context.textBaseline = 'middle';
+      context.fillText(label, canvas.width / 2, canvas.height / 2, canvas.width - 30);
+      const texture = new THREE.CanvasTexture(canvas);
+      texture.colorSpace = THREE.SRGBColorSpace;
+      const text = mesh(new THREE.PlaneGeometry(width, height), new THREE.MeshBasicMaterial({ map: texture }), parent, 0, y, z + 0.032, false);
+      text.name = `bay-label-${label.toLowerCase().replaceAll(' ', '-')}`;
+    } catch { /* Browsers with disabled canvas can still play; Node never enters here. */ }
+  }
+
+  private buildBayLocale() {
+    const level = this.bayLevel!;
+    const radii = BAY_LEVEL.surfaceRadii;
+    const sand = new THREE.Color(0xead5a8), mint = new THREE.Color(PALETTE.grass);
+    const shallow = new THREE.Color(0x8ad8ce), blue = new THREE.Color(0x479cae);
+    this.bayOverlay('bay-land', [BAY_LEVEL.landPolygon], () => radii.ground,
+      material(0xffffff, { vertexColors: true, roughness: 1 }), p => {
+        const coast = Math.min(1, level.distanceToShore(p.x, p.y) / 1.1);
+        const color = sand.clone().lerp(mint, coast);
+        const landing = BAY_LEVEL.landingRegion;
+        if (p.x >= landing.minX && p.x <= landing.maxX && p.y >= landing.minY && p.y <= landing.maxY) color.lerp(new THREE.Color(0xb5d7b4), 0.65);
+        return color;
+      });
+    this.bayOverlay('bay-water', [BAY_LEVEL.waterPolygon], () => radii.water,
+      material(0xffffff, { vertexColors: true, roughness: 0.68, metalness: 0.02 }), p => shallow.clone().lerp(blue, Math.min(1, level.distanceToShore(p.x, p.y) / 0.85)));
+    const circle = Array.from({ length: 64 }, (_, i) => ({
+      x: BAY_LEVEL.pad.center.x + Math.cos(i / 64 * Math.PI * 2) * BAY_LEVEL.pad.radius,
+      y: BAY_LEVEL.pad.center.y + Math.sin(i / 64 * Math.PI * 2) * BAY_LEVEL.pad.radius,
+    }));
+    this.bayOverlay('bay-road', [...Object.values(BAY_LEVEL.roads).map(road => road.polygon), circle], () => radii.road, material(PALETTE.road, { roughness: 0.96 }));
+    this.buildBayRamp();
+    this.bayArrow({ x: -6, y: 1.2 }, { x: 0, y: 1 }, 0.82, 0x4d927c);
+    this.bayArrow({ x: -5.45, y: 0 }, { x: 1, y: 0 }, 0.65);
+    this.bayArrow({ x: -3.65, y: 0 }, { x: 1, y: 0 }, 0.9);
+    this.bayArrow({ x: 5.8, y: 0 }, { x: 1, y: 0 }, 0.85, 0xfff2d5);
+
+    const sign = this.bayFrame({ x: -6.15, y: -1.55 }, { x: -8, y: -1.55 });
+    sign.name = 'bay-fork-sign';
+    mesh(new THREE.BoxGeometry(0.1, 1.28, 0.1), material(0x866b51), sign, 0, 0.64);
+    this.bayPlaque(sign, 'SAFE ROAD', 1.12, 0.24, 1.19, 0.04, '#427760');
+    this.bayPlaque(sign, 'BAY JUMP', 1.12, 0.24, 0.83, 0.04, '#ad6245');
+    // Non-text directional silhouettes survive the no-canvas fallback.
+    for (const [height, color, angle] of [[1.19, 0x589880, Math.PI / 2], [0.83, PALETTE.orange, 0]]) {
+      const arrow = mesh(new THREE.ConeGeometry(0.13, 0.25, 3), material(color), sign, 0.73, height, 0.04);
+      arrow.rotation.z = angle;
+    }
+    this.root.add(sign);
+
+    // Small, bounded wave glints, all strictly inside the SAME sampled water polygon.
+    const waveGeometry = new THREE.BoxGeometry(0.34, 0.008, 0.027);
+    for (const p of [{ x: -0.8, y: 1.2 }, { x: 0.9, y: -0.3 }, { x: -0.6, y: -1.6 }, { x: 1.5, y: -3.2 }, { x: -2, y: -4.5 }]) {
+      if (!inBayPolygon(p, BAY_LEVEL.waterPolygon)) continue;
+      const wave = this.bayFrame(p, { x: p.x, y: p.y + 1 }, radii.water + 0.009);
+      mesh(waveGeometry, material(0xc4eee0), wave, 0, 0, 0, false);
+      mesh(waveGeometry, material(0xa0ded4), wave, 0.16, 0, 0.15, false).scale.x = 0.6;
+      this.root.add(wave);
+    }
+    // Low landing chevrons sit OUTSIDE the usable 3.3 m-wide landing area.
+    for (const x of [3.1, 4.8, 6.5]) for (const y of [-1.84, 1.84]) {
+      this.bayOverlay('bay-landing-marker', [[{ x: x - 0.13, y: y - 0.12 }, { x: x + 0.13, y: y - 0.12 }, { x: x + 0.13, y: y + 0.12 }, { x: x - 0.13, y: y + 0.12 }]], () => radii.ground + 0.012, material(0xfff1cf));
+    }
+    this.buildBayBakery();
+  }
+
+  private buildBayRamp() {
+    const level = this.bayLevel!, ramp = BAY_LEVEL.ramp;
+    const vertices: number[] = [], indices: number[] = [];
+    const rows = 24, columns = 8;
+    for (let row = 0; row <= rows; row++) for (let column = 0; column <= columns; column++) {
+      const x = ramp.base.x + ramp.length * row / rows, y = ramp.base.y + ramp.width * (column / columns - 0.5);
+      vertices.push(...level.toNormal(x, y).multiplyScalar(level.rampRadiusAt(x)).toArray());
+      if (row < rows && column < columns) {
+        const k = row * (columns + 1) + column;
+        indices.push(k, k + columns + 1, k + 1, k + 1, k + columns + 1, k + columns + 2);
+      }
+    }
+    const geometry = new THREE.BufferGeometry();
+    geometry.setAttribute('position', new THREE.Float32BufferAttribute(vertices, 3));
+    geometry.setIndex(indices); geometry.computeVertexNormals();
+    const deck = mesh(geometry, material(0xffe8b7, { roughness: 0.91 }), this.root, 0, 0, 0, false);
+    deck.name = 'bay-ramp-deck'; deck.receiveShadow = true;
+    const sideVertices: number[] = [];
+    const wall = (ax: number, ay: number, bx: number, by: number) => {
+      const a = level.toNormal(ax, ay), b = level.toNormal(bx, by);
+      const lowerA = a.clone().multiplyScalar(BAY_LEVEL.surfaceRadii.ground);
+      const upperA = a.multiplyScalar(level.rampRadiusAt(ax));
+      const lowerB = b.clone().multiplyScalar(BAY_LEVEL.surfaceRadii.ground);
+      const upperB = b.multiplyScalar(level.rampRadiusAt(bx));
+      for (const p of [lowerA, lowerB, upperA, upperA, lowerB, upperB]) sideVertices.push(...p.toArray());
+    };
+    for (let i = 0; i < rows; i++) for (const side of [-1, 1]) {
+      wall(ramp.base.x + ramp.length * i / rows, side * ramp.width / 2, ramp.base.x + ramp.length * (i + 1) / rows, side * ramp.width / 2);
+    }
+    // Visible launch face, never a physical wall: the sampler owns support/launch.
+    for (let i = 0; i < columns; i++) wall(ramp.lip.x, ramp.width * (i / columns - 0.5), ramp.lip.x, ramp.width * ((i + 1) / columns - 0.5));
+    const sides = new THREE.BufferGeometry();
+    sides.setAttribute('position', new THREE.Float32BufferAttribute(sideVertices, 3)); sides.computeVertexNormals();
+    mesh(sides, material(0xe88d5e, { side: THREE.DoubleSide }), this.root);
+    for (const y of [-ramp.width / 2, ramp.width / 2 - 0.105]) {
+      this.bayOverlay('bay-ramp-edge', [[{ x: ramp.base.x, y }, { x: ramp.lip.x, y }, { x: ramp.lip.x, y: y + 0.105 }, { x: ramp.base.x, y: y + 0.105 }]], p => level.rampRadiusAt(p.x) + 0.008, material(PALETTE.orange));
+    }
+    this.bayOverlay('bay-ramp-lip', [[{ x: ramp.lip.x - 0.10, y: -ramp.width / 2 }, { x: ramp.lip.x, y: -ramp.width / 2 }, { x: ramp.lip.x, y: ramp.width / 2 }, { x: ramp.lip.x - 0.10, y: ramp.width / 2 }]], p => level.rampRadiusAt(p.x) + 0.012, material(0xffffff));
+  }
+
+  private buildBayBakery() {
+    const authored = BAY_LEVEL.bakery;
+    const bakery = this.bayFrame(authored.center, authored.facing);
+    bakery.name = 'bay-bakery';
+    this.root.add(bakery);
+    const wall = material(0xf2ce9c), trim = material(PALETTE.cream), wood = material(0x76604c);
+    // An actual hollow doorway: side piers/header, back and side walls, not a solid box.
+    mesh(new THREE.BoxGeometry(2.08, 1.52, 0.12), wall, bakery, 0, 0.78, -0.65);
+    for (const x of [-0.99, 0.99]) mesh(new THREE.BoxGeometry(0.12, 1.52, 1.4), wall, bakery, x, 0.78, 0);
+    for (const x of [-0.7, 0.7]) mesh(new THREE.BoxGeometry(0.69, 1.52, 0.13), wall, bakery, x, 0.78, 0.65);
+    mesh(new THREE.BoxGeometry(0.72, 0.48, 0.13), wall, bakery, 0, 1.30, 0.65);
+    mesh(new THREE.BoxGeometry(0.72, 1.06, 0.06), material(0x54473d), bakery, 0, 0.55, -0.34);
+    mesh(new THREE.BoxGeometry(2.17, 0.10, 1.50), trim, bakery, 0, 0.01, 0);
+    for (const x of [-0.35, 0.35]) mesh(new THREE.BoxGeometry(0.065, 1.06, 0.18), trim, bakery, x, 0.56, 0.71);
+    mesh(new THREE.BoxGeometry(0.76, 0.08, 0.18), trim, bakery, 0, 1.07, 0.71);
+    const roof = new THREE.Shape();
+    roof.moveTo(-1.18, 0); roof.lineTo(1.18, 0); roof.lineTo(0, 0.67); roof.closePath();
+    mesh(new THREE.ExtrudeGeometry(roof, { depth: 1.68, bevelEnabled: false }), material(0xc37e63), bakery, 0, 1.54, -0.84);
+    mesh(new THREE.BoxGeometry(0.25, 0.57, 0.25), trim, bakery, 0.65, 1.98, -0.33);
+    const awning = mesh(new THREE.BoxGeometry(2.2, 0.085, 0.62), material(PALETTE.orange), bakery, 0, 1.20, 0.95);
+    awning.rotation.x = 0.12;
+    for (let i = -4; i <= 4; i++) {
+      const stripe = mesh(new THREE.BoxGeometry(0.11, 0.09, 0.63), trim, bakery, i * 0.24, 1.20, 0.95, false);
+      stripe.rotation.x = 0.12;
+    }
+    this.bayPlaque(bakery, 'SUNRISE BAKERY', 1.68, 0.29, 1.58, 0.82);
+    for (const x of [-0.8, 0.8]) {
+      mesh(new THREE.BoxGeometry(0.32, 0.22, 0.29), material(0xb17f62), bakery, x, 0.13, 0.91);
+      for (const dx of [-0.08, 0.08]) {
+        mesh(new THREE.IcosahedronGeometry(0.15, 0), material(0x689775), bakery, x + dx, 0.32, 0.91);
+        mesh(new THREE.IcosahedronGeometry(0.048, 0), material(0xffdf9b), bakery, x + dx, 0.44, 0.95, false);
+      }
+    }
+
+    const animation = new THREE.Group();
+    animation.name = 'bay-bakery-animation'; bakery.add(animation);
+    // The cache belongs to all houses; animate ONLY this clone, never the pooled material.
+    const windowMaterial = material(0xffe5ac, { emissive: 0xffc56a, emissiveIntensity: 0.20 }).clone();
+    for (const [i, x] of [-0.72, 0.72].entries()) {
+      mesh(new THREE.BoxGeometry(0.43, 0.49, 0.065), trim, bakery, x, 0.78, 0.735);
+      const window = mesh(new THREE.BoxGeometry(0.34, 0.39, 0.065), windowMaterial, animation, x, 0.78, 0.775, false);
+      window.name = `bay-bakery-window-${i}`;
+      mesh(new THREE.BoxGeometry(0.035, 0.4, 0.02), trim, bakery, x, 0.78, 0.814, false);
+      mesh(new THREE.BoxGeometry(0.35, 0.035, 0.02), trim, bakery, x, 0.78, 0.814, false);
+    }
+    const hinge = new THREE.Group();
+    hinge.name = 'bay-door-hinge'; hinge.position.set(-0.31, 0.04, 0.73); animation.add(hinge);
+    const door = mesh(new THREE.BoxGeometry(0.62, 0.97, 0.075), material(0x649783), hinge, 0.31, 0.485);
+    door.name = 'bay-door';
+    mesh(new THREE.BoxGeometry(0.40, 0.34, 0.025), trim, hinge, 0.31, 0.66, 0.048);
+    mesh(new THREE.SphereGeometry(0.035, 8, 6), wood, hinge, 0.54, 0.43, 0.066);
+
+    const recipient = new THREE.Group();
+    recipient.name = 'bay-recipient'; animation.add(recipient);
+    const skin = material(0xe7ad7b), apron = material(0xffefd3);
+    mesh(new THREE.CylinderGeometry(0.13, 0.18, 0.36, 7), material(0xa0bf9b), recipient, 0, 0.36, 0);
+    mesh(new THREE.BoxGeometry(0.22, 0.28, 0.05), apron, recipient, 0, 0.37, 0.15);
+    for (const x of [-0.09, 0.09]) mesh(new THREE.BoxGeometry(0.10, 0.14, 0.17), wood, recipient, x, 0.09, 0.04);
+    mesh(new THREE.SphereGeometry(0.17, 10, 8), skin, recipient, 0, 0.68);
+    mesh(new THREE.CylinderGeometry(0.17, 0.17, 0.11, 10), apron, recipient, 0, 0.84);
+    mesh(new THREE.IcosahedronGeometry(0.22, 1), apron, recipient, 0, 0.97).scale.set(1, 0.6, 0.8);
+    for (const x of [-0.057, 0.057]) mesh(new THREE.SphereGeometry(0.015, 6, 5), material(0x52473f), recipient, x, 0.70, 0.15, false);
+    const arm = new THREE.Group(); arm.name = 'bay-recipient-wave'; arm.position.set(-0.16, 0.51, 0); recipient.add(arm);
+    mesh(new THREE.CylinderGeometry(0.05, 0.065, 0.26, 6), apron, arm, -0.045, 0.11);
+    mesh(new THREE.SphereGeometry(0.061, 8, 6), skin, arm, -0.045, 0.27);
+    const holdingArm = mesh(new THREE.CylinderGeometry(0.05, 0.06, 0.24, 6), apron, recipient, 0.17, 0.43, 0.13);
+    holdingArm.rotation.x = -0.95;
+
+    const parcel = new THREE.Group(); parcel.name = 'bay-handoff-parcel'; animation.add(parcel);
+    mesh(new THREE.BoxGeometry(0.32, 0.28, 0.27), material(0xdcb783), parcel);
+    mesh(new THREE.BoxGeometry(0.045, 0.29, 0.28), trim, parcel);
+    mesh(new THREE.BoxGeometry(0.33, 0.035, 0.28), trim, parcel);
+    this.bakeryReaction = { root: animation, hinge, recipient, arm, parcel, windowMaterial, parcelStartWorld: new THREE.Vector3(), elapsed: 0, started: false };
+    this.colliders.push({ normal: this.bayLevel!.toNormal(authored.center.x, authored.center.y), radius: authored.colliderRadius });
+    this.resetBayDelivery();
   }
 
   private buildNature() {
@@ -263,7 +557,7 @@ export class PlanetWorld {
     let rockIndex = 0;
     for (let i = 0; i < 430; i++) {
       const n = spherical(Math.asin(this.random() * 2 - 1) * 180 / Math.PI, this.random() * 360 - 180);
-      if (this.terrain(n) < -0.02 || this.nearRoad(n, 1.05) || this.colliders.some(c => surfaceDistance(n, c.normal) < c.radius + 0.9) || this.destinations.some(d => surfaceDistance(n, d.normal) < 1.9)) continue;
+      if (this.bayLevel?.isInSceneryClearance(n) || this.terrain(n) < -0.02 || this.nearRoad(n, 1.05) || this.colliders.some(c => surfaceDistance(n, c.normal) < c.radius + 0.9) || this.destinations.some(d => surfaceDistance(n, d.normal) < 1.9)) continue;
       const group = align(n);
       const s = 0.6 + this.random() * 0.8;
       group.scale.setScalar(s);
@@ -284,7 +578,7 @@ export class PlanetWorld {
     }
     for (let i = 0; i < 300 && rockIndex < 65; i++) {
       const n = spherical(this.random() * 150 - 75, this.random() * 360 - 180);
-      if (this.terrain(n) < -0.07 || this.nearRoad(n) || this.destinations.some(d => surfaceDistance(n, d.normal) < 2)) continue;
+      if (this.bayLevel?.isInSceneryClearance(n) || this.terrain(n) < -0.07 || this.nearRoad(n) || this.destinations.some(d => surfaceDistance(n, d.normal) < 2)) continue;
       dummy.position.copy(n).multiplyScalar(R + 0.07);
       dummy.quaternion.setFromUnitVectors(UP, n);
       dummy.scale.set(0.5 + this.random(), 0.5, 0.5 + this.random());
@@ -299,7 +593,7 @@ export class PlanetWorld {
     const waveMat = material(0xa0d4c9, { transparent: true, opacity: 0.38 });
     for (let i = 0; i < 240; i++) {
       const n = spherical(this.random() * 170 - 85, this.random() * 360 - 180);
-      if (this.terrain(n) > -0.28 || this.nearRoad(n, 0.6)) continue;
+      if (this.bayLevel?.isInSceneryClearance(n) || this.terrain(n) > -0.28 || this.nearRoad(n, 0.6)) continue;
       const wave = align(n, R + 0.025);
       mesh(waveGeo, waveMat, wave, 0, 0, 0, false);
       mesh(waveGeo, waveMat, wave, 0.12, 0, 0.12, false).scale.x = 0.6;
@@ -324,9 +618,11 @@ export class PlanetWorld {
 
   private buildTargets() {
     this.destinations.forEach((destination, i) => {
-      const station = align(destination.normal, R + 0.11);
-      const base = mesh(new THREE.CylinderGeometry(0.87, 0.87, 0.03, 40), material(0xc5bc9c), station, 0, 0.01, 0, false);
-      base.receiveShadow = true;
+      const station = align(destination.normal, this.bayLevel ? BAY_LEVEL.surfaceRadii.road : R + 0.11);
+      if (!this.bayLevel) {
+        const base = mesh(new THREE.CylinderGeometry(0.87, 0.87, 0.03, 40), material(0xc5bc9c), station, 0, 0.01, 0, false);
+        base.receiveShadow = true;
+      }
       const mailbox = new THREE.Group();
       mailbox.position.set(0.98, 0, 0);
       mesh(new THREE.BoxGeometry(0.10, 0.49, 0.10), material(0x785f50), mailbox, 0, 0.24);
@@ -381,7 +677,103 @@ export class PlanetWorld {
     }
   }
 
-  update(dt: number, time: number) {
+  startBayDelivery(parcelStart: THREE.Vector3): void {
+    const reaction = this.bakeryReaction;
+    if (!reaction) return;
+    this.resetBayDelivery();
+    reaction.started = true;
+    reaction.parcelStartWorld.copy(parcelStart);
+    reaction.root.updateWorldMatrix(true, true);
+    reaction.parcel.position.copy(reaction.root.worldToLocal(parcelStart.clone()));
+    reaction.parcel.visible = true;
+  }
+
+  resetBayDelivery(): void {
+    const reaction = this.bakeryReaction;
+    if (!reaction) return;
+    reaction.started = false; reaction.elapsed = 0;
+    reaction.parcelStartWorld.set(0, 0, 0);
+    reaction.hinge.rotation.set(0, 0, 0);
+    reaction.recipient.position.set(0, 0.06, 0.10);
+    reaction.recipient.rotation.set(0, 0, 0);
+    reaction.recipient.scale.setScalar(1);
+    reaction.recipient.visible = false;
+    reaction.arm.rotation.set(0, 0, 0);
+    reaction.parcel.position.set(0, 0, 0);
+    reaction.parcel.rotation.set(0, 0, 0);
+    reaction.parcel.scale.setScalar(1);
+    reaction.parcel.visible = false;
+    reaction.windowMaterial.emissiveIntensity = 0.20;
+    for (const particle of this.splashParticles) {
+      particle.life = 0;
+      particle.mesh.visible = false;
+    }
+  }
+
+  getBayReactionSnapshot(): { active: boolean; progress: number; doorOpen: number; recipientVisible: boolean; parcelVisible: boolean; windowGlow: number } {
+    const r = this.bakeryReaction;
+    return {
+      active: !!r?.started && r.elapsed < BAY_LEVEL.reactionDuration,
+      progress: r?.started ? Math.min(1, r.elapsed / BAY_LEVEL.reactionDuration) : 0,
+      doorOpen: r ? Math.max(0, -r.hinge.rotation.y / 1.35) : 0,
+      recipientVisible: r?.recipient.visible ?? false,
+      parcelVisible: r?.parcel.visible ?? false,
+      windowGlow: r?.windowMaterial.emissiveIntensity ?? 0,
+    };
+  }
+
+  private updateBayDelivery(dt: number) {
+    const r = this.bakeryReaction;
+    if (!r?.started || r.elapsed >= BAY_LEVEL.reactionDuration || !Number.isFinite(dt) || dt <= 0) return;
+    r.elapsed = Math.min(BAY_LEVEL.reactionDuration, r.elapsed + dt);
+    const smooth = (t: number) => { t = THREE.MathUtils.clamp(t, 0, 1); return t * t * (3 - 2 * t); };
+    r.hinge.rotation.y = -1.35 * smooth(r.elapsed / 0.65);
+    r.windowMaterial.emissiveIntensity = 0.20 + smooth(r.elapsed / 0.8);
+    r.recipient.visible = r.elapsed >= 0.20;
+    r.recipient.position.z = 0.10 + 0.96 * smooth((r.elapsed - 0.20) / 0.65);
+    const wave = smooth((r.elapsed - 0.65) / 0.3);
+    r.arm.rotation.z = wave * (this.reducedMotion ? -0.3 : -0.45 + Math.sin((r.elapsed - 0.65) * 11) * 0.36);
+    const handoff = smooth((r.elapsed - 0.48) / 1.02);
+    r.root.updateWorldMatrix(true, true);
+    const destinationWorld = r.recipient.localToWorld(new THREE.Vector3(0.08, 0.46, 0.28));
+    const positionWorld = r.parcelStartWorld.clone().lerp(destinationWorld, handoff);
+    const up = new THREE.Vector3(0, 1, 0).transformDirection(r.root.matrixWorld);
+    positionWorld.addScaledVector(up, Math.sin(handoff * Math.PI) * (this.reducedMotion ? 0.15 : 0.62));
+    r.parcel.position.copy(r.root.worldToLocal(positionWorld));
+    r.parcel.rotation.set(0, this.reducedMotion ? 0 : Math.sin(handoff * Math.PI) * 0.55, this.reducedMotion ? 0 : Math.sin(handoff * Math.PI) * 0.18);
+  }
+
+  /** A fixed-size pool; repeated falls never grow permanent scene objects. */
+  splash(normal: THREE.Vector3): void {
+    if (!this.bayLevel) return;
+    const basis = new THREE.Quaternion().setFromUnitVectors(UP, normal);
+    for (let i = 0; i < 20; i++) {
+      let particle = this.splashParticles[i];
+      if (!particle) {
+        const piece = mesh(this.particleGeometry, this.splashMaterials[i % this.splashMaterials.length], this.root, 0, 0, 0, false);
+        piece.name = 'bay-splash-particle';
+        particle = { mesh: piece, velocity: new THREE.Vector3(), life: 0 };
+        this.splashParticles.push(particle);
+      }
+      particle.life = 0.65 + this.random() * 0.45;
+      particle.mesh.position.copy(normal).multiplyScalar(BAY_LEVEL.surfaceRadii.water + 0.1);
+      particle.mesh.rotation.set(0, 0, 0);
+      particle.mesh.scale.setScalar(1);
+      particle.mesh.visible = true;
+      particle.velocity.set((this.random() - 0.5) * 2.4, 1.4 + this.random() * 1.7, (this.random() - 0.5) * 2.4).applyQuaternion(basis);
+    }
+  }
+
+  update(dt: number, time: number, paused = false) {
+    if (!paused) this.updateBayDelivery(dt);
+    for (const p of this.splashParticles) {
+      if (p.life <= 0) continue;
+      p.life -= dt;
+      p.mesh.visible = p.life > 0;
+      p.mesh.position.addScaledVector(p.velocity, dt);
+      p.velocity.addScaledVector(p.mesh.position.clone().normalize(), -dt * 5);
+      p.mesh.scale.setScalar(Math.max(0, Math.min(1, p.life * 3)));
+    }
     this.clouds.rotation.y += dt * 0.008;
     this.turbines.forEach(rotor => rotor.rotation.z -= dt * 0.65);
     this.icons.forEach((icon, i) => {
