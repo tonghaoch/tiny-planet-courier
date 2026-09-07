@@ -49,7 +49,7 @@ describe('arcade sphere driving', () => {
     }
   });
 
-  it.each(['bay', 'station'] as const)('synchronizes the %s recovery pose immediately without reviving a delivered parcel', prototype => {
+  it.each(['bay', 'station', 'garden'] as const)('synchronizes the %s recovery pose immediately without reviving a delivered parcel', prototype => {
     const world = new PlanetWorld(prototype);
     const environment = world.drivingEnvironment!;
     const vehicle = new Vehicle(new Scene(), environment);

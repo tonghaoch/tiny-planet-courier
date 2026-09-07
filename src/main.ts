@@ -4,7 +4,7 @@ import { AudioFeedback } from './audio';
 import type { BayDriveEvent } from './bay-types';
 import { DeliveryRun, saveBest } from './game';
 import { selectPrototype } from './delivery-prototypes';
-import type { StationRoute } from './station-level';
+import type { RoadRoute } from './road-level';
 import { Input } from './input';
 import { headingTo, PLANET_RADIUS, spherical, surfaceDistance, tangent, UP } from './math';
 import { UI, type BayHUDState } from './ui';
@@ -56,7 +56,8 @@ try {
   scene.add(space);
   const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
   const world = new PlanetWorld(prototype?.id ?? false, reducedMotion);
-  if (world.stationLevel) sun.position.copy(world.stationLevel.toNormal(-5, 8)).multiplyScalar(55);
+  const roadLevel = world.stationLevel ?? world.gardenLevel;
+  if (roadLevel) sun.position.copy(roadLevel.toNormal(-5, 8)).multiplyScalar(55);
   scene.add(world.root);
   const vehicle = new Vehicle(scene, world.drivingEnvironment, reducedMotion);
   const run = new DeliveryRun(world.destinations, { keepDrivingOnFinish: authoredPrototype });
@@ -78,7 +79,7 @@ try {
   let uiClock = 0;
   let resultDelay = 0;
   let pendingResult: { time: number; newRecord: boolean } | null = null;
-  let stationRoute: StationRoute | null = null;
+  let roadRoute: RoadRoute | null = null;
   let testControls: Controls | null = null;
   const recentDriveEvents: string[] = [];
 
@@ -98,7 +99,7 @@ try {
     world.resetDelivery();
     world.setActiveDestination(0);
     pendingResult = null;
-    stationRoute = null;
+    roadRoute = null;
     resultDelay = 0;
     airBlend = 0;
     recentDriveEvents.length = 0;
@@ -136,7 +137,7 @@ try {
       world.resetDelivery();
       world.setActiveDestination(0);
       pendingResult = null;
-      stationRoute = null;
+      roadRoute = null;
       resultDelay = 0;
       ui.resetJourney();
       sound.setPaused(true);
@@ -177,7 +178,7 @@ try {
         testControls = null;
         firstFrame = true;
         airBlend = 0;
-        stationRoute = null;
+        roadRoute = null;
         ui.toast(prototype?.hints.recovery ?? 'Van recovered. Ready to roll.');
       } else if (event.type === 'land' && !run.finished && world.bayLevel && world.bayLevel.toLocal(event.normal).x > 0) {
         ui.toast('Across the bay! Brake for the bakery.');
@@ -187,9 +188,9 @@ try {
 
   function navigationTarget(): THREE.Vector3 | undefined {
     if (!run.target) return undefined;
-    if (world.stationLevel && vehicle.drive?.phase === 'grounded') {
-      const navigation = world.stationLevel.navigation(vehicle.normal, stationRoute);
-      stationRoute = navigation.route;
+    if (roadLevel && vehicle.drive?.phase === 'grounded') {
+      const navigation = roadLevel.navigation(vehicle.normal, roadRoute);
+      roadRoute = navigation.route;
       return navigation.target;
     }
     if (!world.bayLevel || vehicle.drive?.phase !== 'grounded') return run.target.normal;
@@ -215,7 +216,7 @@ try {
     const portrait = width / height < 0.94;
     space.children.forEach(child => { if (!(child instanceof THREE.Points)) child.visible = !portrait; });
     const distance = portrait ? Math.max(56, PLANET_RADIUS * height / (width * 0.91 * Math.tan(THREE.MathUtils.degToRad(19)))) : 54;
-    const orbit = spherical((world.stationLevel ? -4 : 23) + (reducedMotion ? 0 : Math.sin(elapsed * 0.05) * 1.5), (world.stationLevel ? 70 : bayPrototype ? 25 : 34) + (reducedMotion ? 0 : Math.sin(elapsed * 0.032) * 13));
+    const orbit = spherical((world.gardenLevel ? 42 : world.stationLevel ? -4 : 23) + (reducedMotion ? 0 : Math.sin(elapsed * 0.05) * 1.5), (world.gardenLevel ? -78 : world.stationLevel ? 70 : bayPrototype ? 25 : 34) + (reducedMotion ? 0 : Math.sin(elapsed * 0.032) * 13));
     const homePosition = orbit.multiplyScalar(distance);
     const cameraHeight = authoredPrototype ? (portrait ? 13 : 11.8) : (portrait ? 10 : 7.8);
     const cameraBehind = authoredPrototype ? (portrait ? 10.2 : 8.4) : (portrait ? 13 : 10.2);
@@ -318,7 +319,7 @@ try {
         bayState = {
           phase: vehicle.drive.phase, onRamp: surface.kind === 'ramp',
           onCoastalRoad: !!world.bayLevel && world.bayLevel.toLocal(vehicle.normal).y > 1.3,
-          nearDestination: distance < (world.stationLevel ? 2.6 : 6.5), route: stationRoute,
+          nearDestination: distance < (roadLevel ? 2.6 : 6.5), route: roadRoute,
         };
       }
       ui.update(run, vehicle.speed, vehicle.charge, distance, heading, bayState);
@@ -341,12 +342,12 @@ try {
           jumps: vehicle.drive?.jumps, landings: vehicle.drive?.landings, cargoVisible: vehicle.cargoVisible,
           landingGuideVisible: vehicle.landingGuideVisible,
           local: world.authoredLevel?.toLocal(vehicle.normal), reaction: authoredPrototype ? world.getDeliveryReactionSnapshot() : undefined,
-          navigationTarget: navigationTarget()?.toArray(), route: stationRoute,
+          navigationTarget: navigationTarget()?.toArray(), route: roadRoute,
           events: recentDriveEvents.slice(),
         }),
-        routes: () => world.stationLevel ? {
-          outer: world.stationLevel.outerRoute.map(point => point.toArray()),
-          inner: world.stationLevel.innerRoute.map(point => point.toArray()),
+        routes: () => roadLevel ? {
+          outer: roadLevel.outerRoute.map(point => point.toArray()),
+          inner: roadLevel.innerRoute.map(point => point.toArray()),
           destination: world.destinations[0].normal.toArray(),
         } : world.bayLevel ? {
           safe: world.bayLevel.safeRoute.map(point => point.toArray()),

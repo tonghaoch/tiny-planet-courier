@@ -113,7 +113,7 @@ export class UI {
           <button class="text-button" data-action="home">Back to home</button>
         </div>
       </section>
-      <section id="bay-result" class="bay-result" aria-label="${prototype?.id === 'station' ? 'Station' : 'Bay'} delivery result" hidden>
+      <section id="bay-result" class="bay-result" aria-label="${prototype?.id === 'garden' ? 'Garden' : prototype?.id === 'station' ? 'Station' : 'Bay'} delivery result" hidden>
         <div class="bay-result-top">${icons.parcel}<span>ONE LITTLE JOY, DELIVERED</span></div>
         <h2>${prototype?.result.heading ?? 'Good morning,<br>Sunrise Bakery.'}</h2>
         <p>${prototype?.result.description ?? 'The parcel is home. Stay for the view.'}</p>
@@ -192,7 +192,7 @@ export class UI {
       this.setTarget(run.target, run.index);
       this.text('mission-distance', `${Math.round(distance * 10)} m`);
       let hint = distance < DELIVERY_RADIUS ? (Math.abs(speed) < DELIVERY_SPEED ? 'Parked. Delivering a little joy…' : 'Brake to make your delivery.') : 'Follow the arrow to the glow.';
-      if (this.prototype?.id === 'station') {
+      if (this.prototype?.id === 'station' || this.prototype?.id === 'garden') {
         if (driveState?.phase === 'recovering') hint = this.prototype.hints.recovery;
         else if (distance >= DELIVERY_RADIUS) {
           const nearDestination = driveState?.nearDestination ?? distance < 2.6;
@@ -215,7 +215,9 @@ export class UI {
         : this.bayPrototype && driveState.phase === 'airborne' ? 'Airborne'
         : this.bayPrototype && driveState.onRamp ? 'Ready to leap'
         : this.prototype.id === 'station' && driveState.route === 'inner' ? 'Tight turns'
-        : this.prototype.id === 'station' && driveState.route === 'outer' ? 'Outer road' : 'Cruising';
+        : this.prototype.id === 'station' && driveState.route === 'outer' ? 'Outer road'
+        : this.prototype.id === 'garden' && driveState.route === 'inner' ? 'Flower path'
+        : this.prototype.id === 'garden' && driveState.route === 'outer' ? 'Garden loop' : 'Cruising';
       this.text('drive-state', driveLabel);
     }
     this.app.querySelectorAll<HTMLElement>('[data-stop]').forEach(stop => {

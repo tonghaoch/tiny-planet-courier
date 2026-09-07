@@ -1,4 +1,4 @@
-export type PrototypeId = 'bay' | 'station';
+export type PrototypeId = 'bay' | 'station' | 'garden';
 
 /** Authored playtest identity and copy only; scene construction stays outside the UI. */
 export interface PrototypeDefinition {
@@ -99,10 +99,42 @@ export const PROTOTYPES: Readonly<Record<PrototypeId, PrototypeDefinition>> = {
       delivered: 'Delivered to Stargaze Station. Thank you!',
     },
   },
+  garden: {
+    id: 'garden',
+    bestScoreKey: 'tiny-planet-courier:garden:best:v1',
+    name: 'Garden',
+    destinationName: 'Windmill Garden',
+    parcelDescription: 'Flower seeds for the gardener',
+    home: {
+      eyebrow: 'WINDMILL GARDEN · A LITTLE PLAYTEST',
+      title: 'A little path.<br>A big <span class="warm-word">bloom.</span>',
+      description: 'One parcel. A garden full of little turns.<br>Take the wide loop—or flow between the flowers.',
+      ticketHeading: 'ONE GARDEN · TWO WAYS',
+      place: 'Windmill Garden',
+      code: 'GARDEN-01',
+      parcelLabel: 'packet of seeds',
+      ticketDetail: 'A little more color ↗',
+    },
+    hints: {
+      start: 'Wide garden loop, or a flowing path through the flowers.',
+      recovery: 'Back at the approach. Your seeds are safe.',
+      choice: 'Take the garden loop, or weave between the flower beds.',
+      outer: 'Garden loop. Take the wide way round.',
+      inner: 'Flower path. Look ahead and link the bends.',
+      nearDestination: 'Garden ahead. Ease off and park in the glow.',
+    },
+    result: {
+      heading: 'A little more color,<br>Windmill Garden.',
+      description: 'Your seeds made someone’s day. Watch the garden bloom.',
+      bestLabel: 'Garden best',
+      newRecord: 'A new garden best. Beautifully delivered!',
+      delivered: 'Delivered to Windmill Garden. Thank you!',
+    },
+  },
 };
 
 export function selectPrototype(search: string, development: boolean): PrototypeDefinition | null {
   if (!development) return null;
   const id = new URLSearchParams(search).get('prototype');
-  return id === 'bay' || id === 'station' ? PROTOTYPES[id] : null;
+  return id === 'bay' || id === 'station' || id === 'garden' ? PROTOTYPES[id] : null;
 }

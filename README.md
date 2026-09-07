@@ -67,7 +67,17 @@ Open **http://127.0.0.1:5173/?prototype=station** for the next independent one-p
 - **R** immediately returns to the approach with the current delivery clock intact. **Try another route** resets the letter, reaction and clock for another attempt at this same destination.
 - Station has its own best-time record, separate from the original game and Bay Leap. Keyboard, optional sound and touch controls remain available after delivery.
 
-Both prototype selectors are development-only. Production builds and `npm run preview` intentionally keep the original three-delivery game, including when prototype query parameters are present.
+### Windmill Garden playtest — development only
+
+Open **http://127.0.0.1:5173/?prototype=garden** to bring a packet of **flower seeds** to the gardener. This third independent slice focuses on smooth, linked turns rather than Station's tighter braking challenge.
+
+- Follow the green arrows around the wide **Garden loop**, or take the shorter coral-arrow **Flower path** through continuous S-bends between visible flower beds.
+- The driving controller and tuning are unchanged. Look ahead and link your turns; no new buttons, grip rules, jumps or wind forces are needed.
+- Park in the glow: the gardener takes the seeds, waves, and the nearby flowers bloom. The windmill remains decorative, and delivery does not interrupt driving.
+- **R** returns to the approach without restarting the clock. **Try another route** resets the seeds, gardener, flowers and clock for another attempt.
+- Garden has its own best-time record, independent of Bay Leap, Station and the original game. Optional sound, reduced-motion feedback and touch controls are supported.
+
+All prototype selectors are development-only. Production builds and `npm run preview` intentionally keep the original three-delivery game, including when prototype query parameters are present.
 
 See the [iteration plan and handoff](docs/iteration-plan.md) for a fresh-computer setup, completed work, verification results, and the next playtest decisions.
 
@@ -86,7 +96,7 @@ Touchscreens have on-screen steering, throttle, brake, and boost buttons. Sound 
 
 Follow the arrow in the upper-left panel and the destination marker. **Slow down and park inside the glowing delivery ring** to hand over your parcel automatically. You must remain parked briefly: speeding through or flying over the ring will not count. Finish all three deliveries to see your journey time. There is no time limit or failure countdown.
 
-The pale roads connect the sights, but you can drive freely over both land and water. This is arcade-style spherical driving, not a realistic vehicle or orbital simulation. Tree trunks, houses, and major buildings block your path. Pressing R stops and recovers the van in place; it does not teleport you back to the start.
+In the original game, the pale roads connect the sights, but you can drive freely over both land and water. This is arcade-style spherical driving, not a realistic vehicle or orbital simulation. Tree trunks, houses, and major buildings block your path. Pressing R stops and recovers the van in place; it does not teleport you back to the start.
 
 ## Build and test
 
@@ -100,7 +110,7 @@ npm run preview
 
 - `build`: Checks TypeScript and generates the static site in `dist/`.
 - `test`: Runs Vitest unit tests for spherical math, driving, and delivery rules.
-- `test:browser`: Uses Playwright to check the original game and both prototypes, including physically driven routes, desktop/narrow-screen layouts, pause/resume, deliveries, replay, touch controls, graphics recovery and unavailable storage. Defaults to locally installed Microsoft Edge; with Chrome installed, use `PLAYWRIGHT_CHANNEL=chrome npm run test:browser`.
+- `test:browser`: Uses Playwright to check the original game and all three prototypes, including physically driven routes, desktop/narrow-screen layouts, pause/resume, deliveries, replay, touch controls, graphics recovery and unavailable storage. Defaults to locally installed Microsoft Edge; with Chrome installed, use `PLAYWRIGHT_CHANNEL=chrome npm run test:browser`.
 - `test:preview`: Builds and checks that production still shows the original game and never exposes the local test bridge. Use `PLAYWRIGHT_CHANNEL=chrome npm run test:preview` to select Chrome instead of Edge.
 - Browser screenshots are saved to `artifacts/`. Failure diagnostics are saved to `test-results/`.
 

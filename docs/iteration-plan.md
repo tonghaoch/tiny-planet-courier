@@ -3,10 +3,11 @@
 ## Current checkpoint
 
 - **Branch:** `prototype/bay-leap`
-- **Status:** Bay Leap and Stargaze Station both received positive owner playtest feedback on 2026-09-07. Windmill Garden is the next proposed slice; implementation has not started.
-- **Scope:** One parcel and two route choices per selected slice. The original three-stop game and the existing Bay Leap remain available.
+- **Status:** Bay Leap and Stargaze Station received positive owner playtest feedback on 2026-09-07. Windmill Garden was verified and received positive owner feedback on its distinct route rhythms on 2026-09-08.
+- **Scope:** One parcel and two route choices per selected slice. The original three-stop game and all three independent prototypes remain available.
+- **Checkpoint:** All three accepted slices; Station baseline `a69cf60`, followed by the Garden expansion.
 
-This branch contains the Bay Leap and Station checkpoints for cross-computer continuation. After positively playtesting Station, the owner requested its checkpoint commit/push before starting Garden. **Neither checkpoint authorizes merging into `main` or replacing the live GitHub Pages game.**
+This branch checkpoints Bay Leap, Station and Garden for cross-computer continuation. The owner requested Station's commit/push before starting Garden, then explicitly requested the Garden commit/push after positively playtesting its route rhythms. **These checkpoints do not authorize merging into `main` or replacing the live GitHub Pages game.**
 
 ## Continue on another computer
 
@@ -21,12 +22,13 @@ npm run dev
 
 - **Bay prototype:** http://127.0.0.1:5173/?prototype=bay
 - **Station prototype:** http://127.0.0.1:5173/?prototype=station
+- **Garden prototype:** http://127.0.0.1:5173/?prototype=garden
 - **Original game for comparison:** http://127.0.0.1:5173/
 - **Existing public game:** https://tonghaoch.github.io/tiny-planet-courier/
 
 If the repository is already cloned, start with a clean working tree, run `git fetch origin`, and check out `prototype/bay-leap`. If no local copy of that branch exists yet, use `git switch --track origin/prototype/bay-leap`.
 
-The prototype selector is gated by `import.meta.env.DEV`. **`npm run preview` and production builds intentionally show the original game, even if `?prototype=bay` or `?prototype=station` is present.** Unknown prototype values also use the original game. Use the development server to play these slices.
+The prototype selector is gated by `import.meta.env.DEV`. **`npm run preview` and production builds intentionally show the original game, even if `?prototype=bay`, `?prototype=station` or `?prototype=garden` is present.** Unknown prototype values also use the original game. Use the development server to play these slices.
 
 The project is self-contained: no local agent worktrees, global configuration, external models, credentials, or backend service are required. Best times are browser-local and are not transferred by Git.
 
@@ -46,7 +48,7 @@ Spawn ----+               Bay                +---- Sunrise Bakery
 
 ### Boundaries to preserve
 
-- One parcel per selected slice: **Sunrise Bakery** in Bay Leap, **Stargaze Station** in Station. No larger mission system or connected three-stop prototype yet.
+- One parcel per selected slice: **Sunrise Bakery**, **Stargaze Station** or **Windmill Garden**. No larger mission system or connected three-stop prototype yet.
 - Keep the English UI and mint, cream, and coral toy-world aesthetic.
 - No time limit, parcel loss, long retry sequence, or blocking delivery cutscene.
 - No new driving buttons: WASD/arrows, Space, R, and the existing touch controls.
@@ -95,39 +97,56 @@ The owner described Bay Leap as more comfortable and realistic, and positively c
 
 Road and grass deliberately use the same driving behavior. Visible obstacles discourage a straight-line bypass; no invisible lane walls or new grip rules were introduced. Both route choices share one Station record. R retains the current delivery clock; **Try another route** resets the selected slice, not the destination selection.
 
+## Garden expansion — 2026-09-08
+
+After the Station checkpoint was committed and pushed as requested, the owner authorized the next independent slice. Garden preserves the accepted driving controller and focuses on linking turns smoothly, rather than repeating Station's tight braking bends.
+
+- [x] DEV-only `?prototype=garden`, one **packet of flower seeds**, and record key `tiny-planet-courier:garden:best:v1`.
+- [x] A wide **Garden loop** and a shorter **Flower path** through continuous S-bends. Curved centerlines feed both road outlines and sampling; no new grip, wind, jump or steering rules were added.
+- [x] Visible flower-bed colliders, green/coral arrows and a fork sign. Road-width clearance checks prompted a wider outer approach and a smaller bed rather than looser tests or changed driving physics.
+- [x] A local frame anchored at the original garden, latitude 48°, longitude −50°; delivery pad `(0,0)`, spawn and recovery `(-13,0)`.
+- [x] Shared two-route navigation in `src/road-level.ts`, retaining Station's route data and guidance thresholds. Only the selected locale is built.
+- [x] The gardener takes the seeds and waves; a nearby bed blooms with fixed, reusable scene objects. Pausing freezes the handoff/flowers, and restart restores their initial state. The rotor remains ambient scenery, not a moving obstacle or wind mechanic.
+- [x] Independent records, completed-but-drivable sessions, immediate R recovery, early restart, home/start, optional sound, reduced-motion feedback and 320px touch/results use the existing contracts.
+- [x] Desktop home, mid-route, delivered and small-phone screenshots inspected. Real-controller and browser route checks pass without collisions, jumps or recoveries.
+
+Garden remains a short, independently selected delivery. Do not retune Bay or Station to accommodate it, and do not connect all three locales into a tour without an explicit map/session design decision.
+
 ## Where to work
 
 | Area | Files | Responsibility |
 | --- | --- | --- |
 | Shared local geometry | `src/authored-level.ts` | Geodesic coordinates, road outlines, footprint clearance, surface sampling and optional ramp support |
 | Bay course | `src/bay-level.ts` | Unchanged `BAY_LEVEL` layout and existing Bay-facing exports |
-| Station course | `src/station-level.ts` | Station roads, obstacles, spawn/recovery, landmark placement and branch guidance |
+| Station course | `src/station-level.ts` | Station roads, obstacles, spawn/recovery and landmark placement |
+| Garden course | `src/garden-level.ts` | Flowing paths, flower beds, spawn/recovery and windmill placement |
+| Ground-route guidance | `src/road-level.ts` | Shared two-branch selection and navigation, with Station behavior preserved |
 | Prototype identity and copy | `src/delivery-prototypes.ts` | DEV selector, English per-slice copy and isolated record keys |
 | Driving feel | `src/bay-driving.ts` | `BAY_DRIVING_TUNING`, grounded/airborne/recovering states, flight prediction, contact and recovery |
 | Shared interfaces | `src/bay-types.ts` | Surface samples, poses, ramp crossings, drive events, and landing predictions |
-| World and handoffs | `src/world.ts`, `src/station-reaction.ts` | Shared spherical overlays/clearance/batching, Bakery and Station reactions, splash pool |
+| World and handoffs | `src/world.ts`, `src/station-reaction.ts`, `src/garden-reaction.ts` | Shared spherical overlays/clearance/batching, destination reactions and splash pool |
 | Vehicle presentation | `src/vehicle.ts` | Shared van model, prototype controller adapter, suspension/cargo feedback, landing guide and shadow |
 | Integration and camera | `src/main.ts` | DEV selector, fixed-step update, events, camera, non-blocking delivery and local test bridge |
 | Session and UI | `src/game.ts`, `src/ui.ts`, `src/style.css` | Completion policy, separate records, feedback, progress and compact result card |
 | Sound | `src/audio.ts` | Optional driving/impact audio, mute, pause and lifecycle cleanup |
-| Route validation | `src/bay-route.test.ts`, `src/station-route.test.ts`, `tests/helpers/bay-pilot.ts`, `tests/browser/` | Real-controller route completion and browser interaction checks |
+| Route validation | `src/bay-route.test.ts`, `src/station-route.test.ts`, `src/garden-route.test.ts`, `tests/helpers/bay-pilot.ts`, `tests/browser/` | Real-controller route completion and browser interaction checks |
 | Production isolation | `tests/production/prototype.spec.ts`, `playwright.preview.config.ts` | Original-only preview and absence of the test bridge |
 
 Keep geometry and physics in agreement. If changing ramp length/rise, shore positions, or landing dimensions, update the shared level data and recheck actual flight ranges. Do not create a visual-only ramp or a hidden support surface across the water.
 
 ## Validation at handoff
 
-Last verified on 2026-09-07 with Node.js 24 and locally installed Google Chrome:
+Last verified on 2026-09-08 with Node.js 24 and locally installed Google Chrome:
 
-- **114 unit tests passed** (11 files), including the original 84-test baseline.
-- **13 development browser tests passed**, preserving the original 10 checks and adding three Station flows.
-- **4 production-preview browser checks passed**: default, Bay, Station and unknown selectors all keep the original game and expose no test bridge.
+- **131 unit tests passed** (13 files), preserving the Station checkpoint's 114-test baseline.
+- **16 development browser tests passed**, preserving the original and Station checks and adding three Garden flows.
+- **5 production-preview browser checks passed**: default, Bay, Station, Garden and unknown selectors all keep the original game and expose no test bridge.
 - TypeScript checks and the production build passed.
-- Both Bay routes and both Station routes were completed by steering the actual controller, not by teleporting to the destination. Station's driven routes had no collisions, jumps or recoveries.
+- All six intended routes were completed by steering the actual controller, not by teleporting to the destination. Station and Garden's driven routes had no collisions, jumps or recoveries.
 - Bay launch entry speeds of **6.2, 6.8, and 7.8** still land across the bay; the unboosted splash/recovery regression remains green.
-- Station coverage includes selected-branch guidance, destination-specific handoff, isolated records, keyboard boost after sound toggle, immediate R state, pause, early restart, home/start, reduced motion, unavailable storage, continuing driving after completion and 320px simultaneous touch/retry behavior.
+- Ground-prototype coverage includes selected-branch guidance, destination-specific handoffs, isolated records, keyboard boost after sound toggle, immediate R state, pause, early restart, home/start, reduced motion, unavailable storage, continuing driving after completion and 320px simultaneous touch/retry behavior. Garden additionally checks continuous movement through its S-bends and blooming/reset behavior.
 
-Recorded browser runs took roughly **9 seconds on Bay's coast route and 4.2 seconds via the leap**, and **8 seconds on Station's outer road versus 5.6 seconds through the inner lane**. These are technical smoke-test observations, **not human playtest results or proof that the new route is fun**.
+Recorded browser runs took roughly **9 seconds on Bay's coast route and 4.2 seconds via the leap**, **8.1 seconds on Station's outer road versus 5.6 seconds through the inner lane**, and **9.2 seconds on the Garden loop versus 6.9 seconds on the Flower path**. These are technical smoke-test observations, **not human playtest results or proof that the new route is fun**.
 
 ```sh
 npm test
@@ -143,28 +162,38 @@ Browser tests default to a locally installed **Microsoft Edge**. `PLAYWRIGHT_CHA
 
 Generated screenshots and test diagnostics go into ignored `artifacts/` and `test-results/` directories. Vite reports a non-blocking bundle-size warning; do not turn this playtest into an unrelated bundling rewrite unless measured loading problems justify it.
 
-## Next iteration: plan Windmill Garden
+## Next decision: whether to connect the slices
 
-### 1. Preserve the accepted Station baseline
+### 1. Preserve the accepted baseline
 
-On 2026-09-07, after being asked about route distinction and whether the inner lane rewards better driving, the owner confirmed they had played Station and called it excellent ("特别棒"). The Station playtest gate is satisfied; do not repeat the general acceptance checklist or retune the accepted handling without a concrete reason.
+On 2026-09-07, after being asked about route distinction and whether the inner lane rewards better driving, the owner confirmed they had played Station and called it excellent ("特别棒"). The Station playtest gate is satisfied; do not repeat its general acceptance checklist or retune the accepted handling without a concrete reason.
 
-This is positive hands-on feedback, not a claim that every device or edge case was manually checked. Preserve the automated regressions, and propose Garden's scope before implementing it. It is not approval to connect the slices, merge, or deploy.
+The owner then explicitly requested the Station commit/push and the Garden implementation. On 2026-09-08, after playing Garden, they confirmed that different routes have different rhythms ("不同的路线不同的节奏") and that the experience feels good. Garden's route-rhythm/distinction playtest gate is satisfied. This does not claim manual coverage of every device or edge case, and is not approval to connect the slices, merge, or deploy. The owner subsequently requested the Garden commit/push.
 
-### 2. Tune the weakest link, not the feature count
+### 2. Preserve three distinct route identities
 
-- If a bend feels arbitrary, inspect its geometry, sightline, route guidance and braking room before changing the accepted global steering settings.
-- If delivery feels flat, improve timing, framing, sound or the Station reaction before adding rewards or progression.
+- **Bay Leap:** approach speed, a readable leap, landing and forgiving retry.
+- **Stargaze Station:** braking and line choice through tighter bends.
+- **Windmill Garden:** steady, linked steering through flowing S-bends.
+
+The same accepted driving controller supports these different rhythms. Future work should preserve that contrast; revisit the general playtest checklist only when a concrete change warrants it. The owner requested a Garden checkpoint; designing a connected journey remains a separate next decision.
+
+### 3. Tune the weakest link, not the feature count
+
+- If a bend feels arbitrary, inspect geometry, sightlines, route guidance and road-width clearance before changing global steering settings.
+- If delivery feels flat, improve the gardener/bloom timing and framing before adding rewards or progression.
 - If retries drag, adjust recovery/reset presentation instead of adding menus or a retry currency.
 
-Make a small change, replay both Station and Bay routes, and preserve the regression tests. More realistic physics or stronger camera shake is not automatically an improvement.
+Make a small change, replay all three prototypes, and preserve the regression tests. More realistic physics or stronger camera shake is not automatically an improvement.
 
-### 3. Expand only after each slice earns it
+### 4. Expand only after each slice earns it
 
 - [x] Obtain positive owner feedback on Bay's driving, leap/retry and delivery loop.
-- [x] Carry that baseline into an independently playable Station slice.
-- [x] Obtain hands-on feedback on Station before implementing Windmill Garden.
-- [ ] Then consider Garden's flowing S-path versus forgiving perimeter route, without new driving systems.
+- [x] Carry that baseline into an independently playable Station slice and obtain positive owner feedback.
+- [x] Commit and push the accepted Station checkpoint before starting Garden.
+- [x] Implement Garden's flowing S-path versus forgiving perimeter route without new driving systems.
+- [x] Obtain hands-on feedback on Garden before expanding again.
+- [x] Obtain the owner's explicit request to commit/push the accepted Garden checkpoint.
 - [ ] Decide explicitly whether to connect the slices into a tour; the current locales are independent.
 - [ ] Decide explicitly how prototypes become the production game, and promote/remove the DEV-only gate deliberately.
 - [ ] Merge/deploy to `main` only when the owner separately approves that release step.

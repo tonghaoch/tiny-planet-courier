@@ -1,6 +1,6 @@
-import { Vector3 } from 'three';
-import { AuthoredLevel, point, road, segmentDistance } from './authored-level';
-import { PLANET_RADIUS as R, surfaceDistance } from './math';
+import { point, road } from './authored-level';
+import { RoadLevel } from './road-level';
+import { PLANET_RADIUS as R } from './math';
 
 const spawn = point(-11, 0);
 const fork = point(-8.2, 0);
@@ -44,31 +44,8 @@ export const STATION_LEVEL = {
   destination: { id: 'observatory', name: 'Stargaze Station', label: 'STARGAZE STATION', parcel: 'A letter from Earth', color: 0xc6b6ea },
 } as const;
 
-export type StationRoute = 'outer' | 'inner';
+export type { RoadRoute as StationRoute } from './road-level';
 
-export class StationLevel extends AuthoredLevel {
-  readonly outerRoute = this.route(outer);
-  readonly innerRoute = this.route(inner);
-
+export class StationLevel extends RoadLevel {
   constructor() { super(STATION_LEVEL); }
-
-  navigation(normal: Vector3, previous: StationRoute | null): { route: StationRoute | null; target: Vector3 } {
-    const local = this.toLocal(normal);
-    if (surfaceDistance(normal, this.destination.normal) < 2.3) return { route: previous, target: this.destination.normal };
-    const distanceTo = (path: typeof outer) => Math.min(...path.slice(1).map((p, i) => segmentDistance(local, path[i], p)));
-    const outerDistance = distanceTo(outer), innerDistance = distanceTo(inner);
-    let choice = previous;
-    if (local.x < fork.x - 0.4) choice = null;
-    else if (outerDistance + 0.35 < innerDistance) choice = 'outer';
-    else if (innerDistance + 0.35 < outerDistance) choice = 'inner';
-    const route = choice === 'outer' ? this.outerRoute : this.innerRoute;
-    let closest = 0, best = Infinity;
-    route.forEach((p, i) => {
-      const distance = surfaceDistance(normal, p);
-      if (distance < best) { closest = i; best = distance; }
-    });
-    let ahead = Math.min(route.length - 1, closest + 1);
-    while (ahead < route.length - 1 && surfaceDistance(normal, route[ahead]) < 1.8) ahead++;
-    return { route: choice, target: route[ahead] };
-  }
 }
