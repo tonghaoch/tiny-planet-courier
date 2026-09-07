@@ -3,7 +3,9 @@
   <p><strong>A tiny planet. Three deliveries. One lovely little escape.</strong></p>
   <p>Take the scenic route in a cozy, low-poly 3D browser game.</p>
   <p>
-    <a href="#run-locally"><strong>Play locally</strong></a>
+    <a href="https://tonghaoch.github.io/tiny-planet-courier/"><strong>Play in your browser</strong></a>
+    &nbsp;·&nbsp;
+    <a href="#run-locally">Run locally</a>
     &nbsp;·&nbsp;
     <a href="#how-to-play">Controls</a>
     &nbsp;·&nbsp;
@@ -27,7 +29,7 @@ Hop into your little van and bring a bit of joy to **Sunrise Bakery**, **Stargaz
   <sub>Next stop: Sunrise Bakery. The croissants are still warm.</sub>
 </p>
 
-> **Ready for a little escape?** [Run it locally](#run-locally), or build it and host the static files to share your own playable link.
+> **Ready for a little escape?** [Play now](https://tonghaoch.github.io/tiny-planet-courier/), or [run it locally](#run-locally) to explore the code and make it your own.
 
 ---
 
@@ -73,7 +75,25 @@ npm run preview
 - `test:browser`: Uses Playwright with a locally installed Microsoft Edge to check desktop and narrow-screen layouts, driving, pause/resume, deliveries, replay, touch controls, graphics recovery messages, and unavailable storage. If Edge is not installed, update `playwright.config.ts` and install the browser you want to test with.
 - Browser screenshots are saved to `artifacts/`. Failure diagnostics are saved to `test-results/`.
 
-To deploy, serve `dist/` with a static hosting provider. No application backend, database, or user accounts are required. Do not launch the source by double-clicking `index.html` with a `file://` URL: use the local server for development and a hosted website URL for sharing.
+The production build uses the `/tiny-planet-courier/` base path. After building, `npm run preview` serves it at **http://127.0.0.1:4173/tiny-planet-courier/** by default; `npm run dev` still uses the root URL. Update `vite.config.ts` if you deploy under a different path or a custom domain. Do not launch the source by double-clicking `index.html` with a `file://` URL.
+
+## Automatic deployment
+
+**Live game:** https://tonghaoch.github.io/tiny-planet-courier/
+
+Every push to `main` runs the official GitHub Pages workflow in [`.github/workflows/deploy.yml`](.github/workflows/deploy.yml):
+
+1. Set up Node.js 24 and install locked dependencies with `npm ci`.
+2. Run the unit tests with `npm test`.
+3. Build the game with `npm run build`.
+4. Upload `dist/` with the official Pages artifact action.
+5. Deploy the artifact to GitHub Pages using the `github-pages` environment.
+
+Deployment only proceeds when tests and the build succeed. The workflow uses GitHub's built-in token; no personal access token or additional repository secret is required. Build artifacts remain out of Git history.
+
+You can also open **Actions → Deploy to GitHub Pages → Run workflow** and select `main` to redeploy manually. The repository's **Settings → Pages → Source** must be **GitHub Actions**. Production deployments are restricted to `main`.
+
+The browser tests remain a separate local check because they currently require an installed Microsoft Edge. The deployment workflow runs unit tests and the production build on Ubuntu.
 
 ## Technology and scope
 
