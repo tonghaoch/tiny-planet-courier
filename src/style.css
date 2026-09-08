@@ -381,26 +381,27 @@ h1 { font-family: Georgia, "Times New Roman", serif; font-weight: 400; font-size
 .pause-button { min-width: 44px; min-height: 44px; }
 .planet-note { top: 79%; }
 
-/* A symmetric grid centers the arrow itself, independently of text length. */
-.navigation-hud { position: absolute; top: 128px; left: 50%; transform: translateX(-50%); width: min(600px, calc(100% - 32px)); display: grid; grid-template-columns: minmax(0, 1fr) 72px minmax(0, 1fr); align-items: center; gap: 10px 18px; padding: 16px 22px 12px; border: 1px solid rgba(190, 210, 196, .24); border-radius: 12px; background: rgba(16, 40, 47, .96); -webkit-backdrop-filter: none; backdrop-filter: none; box-shadow: 0 4px 16px rgba(7, 21, 28, .16); color: #fffdf5; pointer-events: none; }
+/* A symmetric grid centers the arrow itself, independently of text length.
+   Widths are 70% of the former responsive bounds; content reflows at readable sizes. */
+.navigation-hud { position: absolute; top: 128px; left: 50%; transform: translateX(-50%); width: min(420px, calc(70% - 22.4px)); display: grid; grid-template-columns: minmax(0, 1fr) 50px minmax(0, 1fr); align-items: center; gap: 6px 12px; padding: 10px 14px 8px; border: 1px solid rgba(190, 210, 196, .24); border-radius: 9px; background: rgba(16, 40, 47, .96); -webkit-backdrop-filter: none; backdrop-filter: none; box-shadow: 0 4px 16px rgba(7, 21, 28, .16); color: #fffdf5; pointer-events: none; }
 /* Keep the road visible with restrained glass; unsupported browsers retain the solid fallback. */
 @supports ((backdrop-filter: blur(5px)) or (-webkit-backdrop-filter: blur(5px))) {
-  .navigation-hud { background: rgba(16, 40, 47, .63); -webkit-backdrop-filter: blur(5px) saturate(1.08); backdrop-filter: blur(5px) saturate(1.08); }
+  .navigation-hud { background: rgba(2, 8, 10, .56); -webkit-backdrop-filter: blur(5px) saturate(1.08); backdrop-filter: blur(5px) saturate(1.08); }
 }
 @media (prefers-reduced-transparency: reduce) {
   .navigation-hud { background: rgba(16, 40, 47, .96); -webkit-backdrop-filter: none; backdrop-filter: none; }
 }
 .navigation-destination, .navigation-distance { min-width: 0; }
-.navigation-label { font-size: 12px; color: #fffdf5; letter-spacing: .4px; }
-#mission-name { font-size: 18px; line-height: 1.3; font-weight: 600; letter-spacing: 0; margin: 5px 0 0; overflow-wrap: anywhere; }
-.navigation-distance { display: flex; flex-direction: column; align-items: flex-end; gap: 5px; }
-#mission-distance { font: 28px/1.1 Consolas, monospace; white-space: nowrap; }
-#mission-index { font: 13px/1.3 Consolas, monospace; color: #fffdf5; }
-.direction-disc { width: 72px; height: 72px; background: rgba(41, 75, 77, .80); border: 1px solid rgba(146, 182, 163, .35); }
-.direction-disc svg { width: 48px; height: 48px; color: #ffc59c; transition: none; }
-#direction-cue { color: #fffdf5; font-size: 32px; line-height: 1; font-weight: 600; }
-#mission-hint { grid-column: 1 / -1; margin: 0; text-align: center; font-size: 14px; line-height: 1.45; color: #fffdf5; overflow-wrap: anywhere; }
-.navigation-hud .delivery-meter { grid-column: 1 / -1; width: 100%; height: 4px; margin: 0; background: #47615f; border-radius: 2px; overflow: hidden; }
+.navigation-label { display: block; font-size: 10px; line-height: 1.2; color: #fffdf5; letter-spacing: .2px; }
+#mission-name { font-size: 14px; line-height: 1.2; font-weight: 600; letter-spacing: 0; margin: 2px 0 0; overflow-wrap: anywhere; }
+.navigation-distance { display: flex; flex-direction: column; align-items: flex-end; gap: 3px; }
+#mission-distance { font: 20px/1.1 Consolas, monospace; white-space: nowrap; }
+#mission-index { font: 10px/1.3 Consolas, monospace; color: #fffdf5; }
+.direction-disc { width: 50px; height: 50px; background: rgba(41, 75, 77, .80); border: 1px solid rgba(146, 182, 163, .35); }
+.direction-disc svg { width: 34px; height: 34px; color: #ffc59c; transition: none; }
+#direction-cue { color: #fffdf5; font-size: 24px; line-height: 1; font-weight: 600; }
+#mission-hint { grid-column: 1 / -1; margin: 0; text-align: center; font-size: 12px; line-height: 1.45; color: #fffdf5; overflow-wrap: anywhere; }
+.navigation-hud .delivery-meter { grid-column: 1 / -1; width: 100%; height: 3px; margin: 0; background: #47615f; border-radius: 2px; overflow: hidden; }
 .mission-card { top: 130px; padding: 17px 19px; background: #10282ff5; }
 .mission-top { font-size: 12px; letter-spacing: .5px; }
 .mission-card p { margin-top: 10px; font-size: 14px; line-height: 1.5; color: #d5e0d5; letter-spacing: 0; }
@@ -428,9 +429,9 @@ h1 { font-family: Georgia, "Times New Roman", serif; font-weight: 400; font-size
   .home-view h1 { font-size: 44px; }
   .hero-copy { margin-block: 0; padding-block: 16px 28px; }
   .home-footer, .planet-note, .orbit-label, .edition, .trip-ticket, .mission-card { display: none; }
-  .navigation-hud { top: 72px; width: min(520px, calc(100% - 240px)); grid-template-columns: minmax(0, 1fr) 64px minmax(0, 1fr); padding: 10px 16px; gap: 8px 12px; }
-  .direction-disc { width: 64px; height: 64px; }
-  .direction-disc svg { width: 44px; height: 44px; }
+  .navigation-hud { top: 72px; width: min(364px, calc(70% - 168px)); grid-template-columns: minmax(0, 1fr) 44px minmax(0, 1fr); padding: 7px 10px; gap: 5px 8px; }
+  .direction-disc { width: 44px; height: 44px; }
+  .direction-disc svg { width: 32px; height: 32px; }
   .run-time { top: 80px; right: 20px; }
   .toast { top: calc(var(--navigation-bottom, 210px) + 8px); padding: 8px 14px; }
   .drive-hint { bottom: 14px; }
@@ -450,12 +451,11 @@ h1 { font-family: Georgia, "Times New Roman", serif; font-weight: 400; font-size
   .hero-copy > .start-button { width: 100%; min-height: 54px; margin-top: 0; font-size: 17px; }
   .start-caption { justify-content: center; font-size: 12px; margin-top: 12px; }
   .home-footer, .trip-ticket, .planet-note, .orbit-label { display: none; }
-  .navigation-hud { top: 88px; width: calc(100% - 24px); grid-template-columns: minmax(0, 1fr) 56px minmax(0, 1fr); gap: 10px 8px; padding: 12px; }
-  .direction-disc { width: 56px; height: 56px; }
-  .direction-disc svg { width: 40px; height: 40px; }
-  #mission-name { font-size: 16px; }
-  #mission-distance { font-size: 24px; }
-  #mission-hint { font-size: 14px; }
+  .navigation-hud { top: 88px; width: calc(70% - 16.8px); grid-template-columns: minmax(0, 1fr) 40px minmax(0, 1fr); gap: 3px 4px; padding: 3px 6px; }
+  .direction-disc { width: 40px; height: 40px; }
+  .direction-disc svg { width: 28px; height: 28px; }
+  #mission-distance { font-size: 18px; }
+  #mission-hint { line-height: 1.3; }
   .run-time { top: auto; bottom: 116px; right: 16px; padding: 8px; gap: 5px; }
   .run-time > span { font-size: 12px; }
   .run-time > strong { font-size: 20px; }
@@ -470,6 +470,11 @@ h1 { font-family: Georgia, "Times New Roman", serif; font-weight: 400; font-size
   .hero-copy > * { flex-shrink: 0; }
   .welcome-planet-space { display: block; flex: 1 0 144px; }
 }
+/* Reclaim decorative spacing for the globe without shrinking or removing welcome copy. */
+@media (max-width: 760px) and (max-height: 720px) and (orientation: portrait) {
+  .hero-copy { padding-top: 8px; }
+  .home-view h1 { margin-block: 10px; }
+}
 @media (max-width: 760px) and (orientation: landscape) {
   .hero-copy { width: 52%; }
   .hero-copy > .start-button { margin-top: 24px; }
@@ -481,10 +486,10 @@ h1 { font-family: Georgia, "Times New Roman", serif; font-weight: 400; font-size
   .hero-description { margin-bottom: 10px; }
   .start-caption { margin-top: 8px; }
   /* Keep the driving center open, including the van's airborne silhouette. */
-  .navigation-hud { top: 68px; grid-template-columns: minmax(0, 1fr) 56px minmax(0, 1fr); padding: 6px 14px 8px; gap: 4px 12px; }
-  .navigation-hud .direction-disc { width: 56px; height: 56px; }
+  .navigation-hud { top: 68px; grid-template-columns: minmax(0, 1fr) 40px minmax(0, 1fr); padding: 3px 10px; gap: 2px 8px; }
+  .navigation-hud .direction-disc { width: 40px; height: 40px; }
   .navigation-hud #mission-hint { line-height: 1.3; }
-  .navigation-hud .delivery-meter { position: absolute; bottom: 0; left: 14px; width: calc(100% - 28px); height: 3px; }
+  .navigation-hud .delivery-meter { position: absolute; bottom: 0; left: 10px; width: calc(100% - 20px); height: 3px; }
   .toast, .toast.visible { top: auto; bottom: max(94px, calc(env(safe-area-inset-bottom) + 94px)); left: 16px; transform: none; width: 260px; max-width: 30%; padding: 8px 10px; gap: 8px; line-height: 1.35; }
   .toast > span { display: none; }
   .driving-console { left: 50%; bottom: 20px; transform: translateX(-50%); padding: 12px 14px; gap: 14px; }

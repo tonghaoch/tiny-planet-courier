@@ -6,6 +6,13 @@ const viewports = [
   { width: 320, height: 640 }, { width: 844, height: 390 },
 ];
 const modes = ['standard', 'bay', 'station', 'garden', 'tour'];
+// Independently measured Tour bounds before the compact layout; compare rendered boxes,
+// not CSS width declarations, and allow 6px of content/font-driven height variation.
+const initialTourBounds = [
+  { viewport: { width: 1440, height: 900 }, width: 600, height: 146.296875 },
+  { viewport: { width: 320, height: 640 }, width: 296, height: 134.890625 },
+  { viewport: { width: 844, height: 390 }, width: 520, height: 94.1875 },
+];
 const font = (page: Page, selector: string) => page.locator(selector).evaluate(element => parseFloat(getComputedStyle(element).fontSize));
 const box = async (page: Page, selector: string) => (await page.locator(selector).boundingBox())!;
 const intersects = (a: { x: number; y: number; width: number; height: number }, b: { x: number; y: number; width: number; height: number }) =>
@@ -85,13 +92,13 @@ async function expectNavigationSurface(page: Page, expected?: NavigationSurface)
     };
   });
   const treatment = expected ?? (surface.reduced ? 'reduced' : surface.supportsFilter ? 'glass' : 'fallback');
-  expect(surface.background.rgb).toEqual([16, 40, 47]);
+  expect(surface.background.rgb).toEqual(treatment === 'glass' ? [2, 8, 10] : [16, 40, 47]);
   expect(surface.backgroundImage).toBe('none');
   expect(surface.fadedElements).toEqual([]);
   if (treatment === 'glass') {
     expect(surface.supportsFilter).toBe(true);
     expect(surface.reduced).toBe(false);
-    expect(surface.background.alpha).toBe(.63);
+    expect(surface.background.alpha).toBe(.56);
     expect(surface.filter).toMatch(/blur\((5|6)px\)/);
     const saturation = Number(surface.filter.match(/saturate\(([\d.]+)\)/)?.[1]);
     expect(saturation).toBeGreaterThanOrEqual(1);
@@ -118,10 +125,27 @@ async function expectNavigationLayout(page: Page, width: number) {
   expect(hud.x).toBeGreaterThanOrEqual(0);
   expect(hud.x + hud.width).toBeLessThanOrEqual(width);
   expect(hud.y).toBeGreaterThanOrEqual((await box(page, '.masthead')).height);
-  expect(await page.locator('#direction-arrow').evaluate(element => parseFloat(getComputedStyle(element).width))).toBeGreaterThanOrEqual(width <= 760 ? 40 : 44);
-  expect(await font(page, '#mission-name')).toBeGreaterThanOrEqual(16);
-  expect(await font(page, '#mission-distance')).toBeGreaterThanOrEqual(24);
-  expect(await font(page, '#mission-hint')).toBeGreaterThanOrEqual(14);
+  expect(await page.locator('#direction-arrow').evaluate(element => parseFloat(getComputedStyle(element).width))).toBeGreaterThanOrEqual(width <= 760 ? 28 : 32);
+  expect(await font(page, '#mission-name')).toBeGreaterThanOrEqual(14);
+  expect(await font(page, '#mission-distance')).toBeGreaterThanOrEqual(18);
+  expect(await font(page, '#mission-hint')).toBeGreaterThanOrEqual(12);
+  for (const selector of ['.navigation-label', '#mission-index']) expect(await font(page, selector)).toBeGreaterThanOrEqual(10);
+  const geometry = await page.locator('#navigation-hud').evaluate(element => {
+    const rect = element.getBoundingClientRect();
+    const scaledAncestors = [];
+    for (let current: Element | null = element; current; current = current.parentElement) {
+      const style = getComputedStyle(current);
+      const matrix = new DOMMatrixReadOnly(style.transform === 'none' ? undefined : style.transform);
+      // Translation centers the HUD; scaling/rotation must not shrink its type or layout box.
+      if (matrix.a !== 1 || matrix.b !== 0 || matrix.c !== 0 || matrix.d !== 1
+        || !['none', '1'].includes(style.getPropertyValue('scale'))
+        || !['', '1', 'normal'].includes(style.getPropertyValue('zoom'))) scaledAncestors.push(current.id || current.tagName);
+    }
+    return { scaledAncestors, width: rect.width, height: rect.height, layoutWidth: element.clientWidth + 2, layoutHeight: element.clientHeight + 2 };
+  });
+  expect(geometry.scaledAncestors).toEqual([]);
+  expect(Math.abs(geometry.width - geometry.layoutWidth)).toBeLessThanOrEqual(1);
+  expect(Math.abs(geometry.height - geometry.layoutHeight)).toBeLessThanOrEqual(1);
   await expect(page.locator('.mission-card #direction-arrow')).toHaveCount(0);
   for (const id of ['direction-arrow', 'mission-name', 'mission-index', 'mission-distance', 'mission-hint', 'delivery-meter']) {
     await expect(page.locator(`#${id}`)).toHaveCount(1);
@@ -135,6 +159,13 @@ async function expectNavigationLayout(page: Page, width: number) {
   }
   const overflow = await page.locator('#navigation-hud, #mission-name, #mission-hint, .navigation-distance').evaluateAll(elements => elements.filter(element => element.scrollWidth > element.clientWidth + 1).map(element => element.id));
   expect(overflow).toEqual([]);
+  for (const selector of ['.navigation-destination', '.direction-disc', '.navigation-distance', '#mission-hint', '#navigation-hud .delivery-meter']) {
+    const content = await box(page, selector);
+    expect(content.x, `${selector} left containment`).toBeGreaterThanOrEqual(hud.x);
+    expect(content.x + content.width, `${selector} right containment`).toBeLessThanOrEqual(hud.x + hud.width);
+    expect(content.y, `${selector} top containment`).toBeGreaterThanOrEqual(hud.y);
+    expect(content.y + content.height, `${selector} bottom containment`).toBeLessThanOrEqual(hud.y + hud.height);
+  }
 }
 
 for (const treatment of ['glass', 'fallback', 'reduced'] as const) {
@@ -231,6 +262,12 @@ for (const viewport of viewports) {
       await expect(page.locator('#navigation-hud')).toBeVisible();
       await page.waitForTimeout(viewport.width === 844 ? 1800 : 200);
       await expectNavigationLayout(page, viewport.width);
+      const baseline = mode === 'tour' && initialTourBounds.find(sample => sample.viewport.width === viewport.width && sample.viewport.height === viewport.height);
+      if (baseline) {
+        const rendered = await box(page, '#navigation-hud');
+        expect(Math.abs(rendered.width - baseline.width * .7), 'HUD rendered width is 70% of the original').toBeLessThanOrEqual(1);
+        expect(Math.abs(rendered.height - baseline.height * .7), 'Initial HUD rendered height is approximately 70% of the original').toBeLessThanOrEqual(6);
+      }
       if (viewport.width === 844) {
         await expect(page.locator('.toast.visible')).toBeVisible();
         expectVanClear(await drivingVisibility(page), viewport.width, viewport.height);

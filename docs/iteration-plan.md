@@ -1,10 +1,14 @@
 # Delivery prototypes — iteration plan and handoff
 
-## Current checkpoint and cross-computer handoff — 2026-09-08
+<a id="current-checkpoint-and-cross-computer-handoff--2026-09-08"></a>
 
-**The owner authorized this branch checkpoint/push:** `prototype/three-stop-tour` at origin `https://github.com/tonghaoch/tiny-planet-courier.git`. This checkpoint includes the whole connected Tour, readability/glass HUD and destination compass, based on accepted slices `412ef66`; use this branch, **not the older `prototype/bay-leap` checkpoint**. The previous main/Pages baseline remains `8656d31`; production remains original-only, with no prototype promotion, merge or Pages deployment authorized.
+## Current checkpoint and cross-computer handoff — 2026-09-09
 
-The primary handles and verifies the commit/push after these documentation edits; this handoff does not claim that operation already succeeded. Identify the received revision with `git log -1 --oneline` after cloning/pulling, rather than a self-referential checkpoint hash. **Owner hands-on approval of the destination compass and connected journey remains pending.** A checkpoint/push request is not gameplay acceptance or permission to release to `main`.
+**Owner-approved visual checkpoint:** on 2026-09-09, the owner responded positively ("Very good") to the small-screen welcome repair and compact, more-transparent HUD, and explicitly requested updated handoff documentation plus commit/push on **`prototype/three-stop-tour`** at origin `https://github.com/tonghaoch/tiny-planet-courier.git`. This checkpoint adds the verified `src/style.css` refinement, `tests/browser/ui-readability.spec.ts` updates and these handoff documents to the connected Tour/destination-compass baseline. Use this branch, **not the older `prototype/bay-leap` checkpoint**.
+
+**Previous published baseline: `56c92fc`**, not the new checkpoint's revision. Before checkpoint preparation, the primary fetched origin and confirmed `HEAD...origin/prototype/three-stop-tour` was **0/0**. The primary will review, commit, push and verify publication separately; this documentation does not claim the pending push succeeded. After publication, use the clone/update workflow below and `git log -1 --oneline` to identify the received revision rather than assuming a future hash.
+
+The application/test diff remains byte-identical to the independently verified 2026-09-08 patch; no new test run is claimed for this documentation update. **Visual approval does not establish final destination-compass or complete Tour gameplay acceptance; those gates remain pending.** No prototype production promotion, main merge or Pages deployment is authorized. The previous main/Pages baseline remains `8656d31`; production remains original-only.
 
 ### Continue on another computer
 
@@ -46,11 +50,45 @@ If switching or fast-forwarding is blocked by local work/divergence, stop and re
 - Shortest-arc frame-independent smoothing, reduced motion, glass HUD, parking/recovery cues and hidden home/pause/completed navigation remain intact. A coincident airborne destination has no invented heading. R, splash recovery, restart, home and handoffs clear stale navigation state.
 - Tour continuity, three parcels, splits, earned checkpoints and accepted route geometry/physics are unchanged. Pose fixtures isolate UI/target behavior, not route playability; real-input route tests provide the latter evidence. See [navigation-stability-plan.md](navigation-stability-plan.md).
 
+### Current compact-HUD and welcome refinement — 2026-09-08
+
+Application changes are confined to **`src/style.css`**; permanent test changes are confined to **`tests/browser/ui-readability.spec.ts`**. Main/UI TypeScript, the active-destination compass, driving, route geometry, game sessions, records, camera rules and control hit targets are unchanged.
+
+- Compact-portrait welcome spacing reclaims **20px**, without reducing text or CTA sizes. The primary measured the **320×640 Tour globe at 177.65625px**, up from 157.65625px, retaining paragraph/CTA clearances and CTA visibility. Welcome body text remains 18px desktop / 16px mobile, support copy 12px, and CTA 17px / 54px tall.
+- HUD sizing uses **real responsive layout, not whole-component transform/zoom scaling**. Long copy can wrap. Text floors are destination **14px**, distance **18px**, hint **12px**, auxiliary navigation **10px**; arrows are **34px desktop / 28px portrait / 32px short landscape**. Welcome/control typography and hit areas are unchanged.
+
+| Initial Tour viewport | Before HUD width × height | After HUD width × height | Width / height retained |
+| --- | --- | --- | --- |
+| 1440×900 | 600 × 146.296875 | 420 × 102.390625 | 70% / 69.99% |
+| 320×640 | 296 × 134.890625 | 207.1875 × 95.78125 | 70% / 71.01% |
+| 844×390 | 520 × 94.1875 | 364 × 65.59375 | 70% / 69.64% |
+
+Normal glass is now **`rgba(2, 8, 10, .56)`**, replacing `rgba(16, 40, 47, .63)`, with the same `blur(5px) saturate(1.08)`. Warm-white text and coral arrows remain fully opaque; there is no opacity on the HUD or its ancestors. Independent composition of actual styles measured minimum white-background contrast **4.58575:1 for text** and **5.39172:1 for the arrow with its unchanged local disc**. Assertions retain text ≥4.5 and arrow ≥3 over white and black, without credit for shadows. Unsupported-filter fallback and reduced transparency retain `rgba(16, 40, 47, .96)`, no blur, and unchanged geometry when preferences toggle.
+
 ### Current verification — primary-supplied results
 
-These checks were run by the primary, **not the documentation-only worker**, with **Node v24.18.0, npm 11.16.0 and local Microsoft Edge**.
+The primary independently reviewed the actual checkout and ran these checks on **2026-09-08, macOS, Node v24.13.1, npm 11.10.1, local Chrome via `PLAYWRIGHT_CHANNEL=chrome`**. Neither implementation nor documentation-only worker ran tests for this refinement.
 
-**All 85 distinct development cases have passing observations across sequential runs (42 + 1 + 42), NOT a clean 85/85 all-in-one command.** Keep this limitation when reporting readiness.
+**All 85/85 development cases passed in one command (6.7 minutes), with no skips.** This supersedes the previous working-tree single-run verification limitation, without rewriting the historical Windows observations below.
+
+| Check | Observed result |
+| --- | --- |
+| Before refinement | Unit **192/192** and build passed. One full development run completed **84/85**, failing the 320×640 Tour welcome globe at **157.65625px vs ≥170px**; that exact assertion repeated **3/3**. This was a real layout failure, not the earlier Windows startup/page-load timeout. |
+| `npm test` | **192/192 passed in 21 files.** |
+| `npm run build` | TypeScript/production passed; existing nonblocking >500kB warning only (**JS 683.21kB, gzip 181.42kB**). |
+| `PLAYWRIGHT_CHANNEL=chrome npm run test:browser -- --output=artifacts/compact-hud-review/browser` | **85/85 passed in one command**, including navigation, real-input complete Tours/closing road, glass/fallback/reduced transparency, text/viewports and visibility. |
+| `PLAYWRIGHT_CHANNEL=chrome npm run test:preview -- --output=artifacts/compact-hud-review/production` | **6/6 passed**, run sequentially after development checks. Production remains original-only. |
+| Fresh, correctly filtered 320×640 Tour welcome repeat | **3/3 passed.** An earlier over-anchored filter matched no tests; it executed no application assertions and was corrected before this repeat. |
+
+The primary separately measured actual bounds, contrast, foreground opacity, absence of component scaling and van clearance, and inspected desktop, 320px phone and 844px short-landscape screenshots. Only intentionally changed HUD dimension/type/normal-color expectations were updated, with actual-bounds guards added. No welcome or contrast gates were relaxed and no timeouts increased. No permanent fix for the separate Windows startup issue or actual Safari/WebKit execution is claimed; fallback coverage exercises the stylesheet support gate.
+
+**Implementation provenance:** the per-process CLI explicitly set `--model gpt-6-astra[1m] --effort medium`; provider message metadata identified `gpt-6-astra`. No global defaults changed and no fallback model was used. The primary independently verified instead of relying on worker claims.
+
+### Historical destination-compass verification — Windows checkpoint
+
+These earlier checks were run by the primary, **not the documentation-only worker**, with **Node v24.18.0, npm 11.16.0 and local Microsoft Edge on Windows**.
+
+**All 85 distinct development cases had passing observations across sequential runs (42 + 1 + 42), NOT a clean 85/85 all-in-one command.** This remains the historical record, not the current macOS verification limit.
 
 | Check | Observed result |
 | --- | --- |
@@ -66,22 +104,20 @@ The primary independently compared the **actual rendered DOM arrow angle** with 
 
 ### Reproduce checks and host limitations
 
-Run browser suites and production-preview checks **sequentially**, never concurrently. Edge is the default; if Chrome is installed, prefix browser/preview commands with `PLAYWRIGHT_CHANNEL=chrome` (bash syntax). For this Windows host, prefer separate files/suites in fresh processes if a long-lived Edge session stalls page loads:
+Run browser suites and production-preview checks **sequentially**, never concurrently. Edge is the default; the current macOS verification explicitly selected installed Chrome:
 
 ```sh
 npm test
 npm run build
-npm run test:browser -- tests/browser/game.spec.ts
-npm run test:browser -- tests/browser/navigation.spec.ts
-npm run test:browser -- tests/browser/tour.spec.ts
-npm run test:browser -- tests/browser/tour.spec.ts --grep '320px Tour' --repeat-each=3
-npm run test:browser -- tests/browser/ui-readability.spec.ts
-npm run test:preview
+PLAYWRIGHT_CHANNEL=chrome npm run test:browser -- --output=artifacts/compact-hud-review/browser
+PLAYWRIGHT_CHANNEL=chrome npm run test:preview -- --output=artifacts/compact-hud-review/production
+# Focused welcome regression repeat in fresh test contexts:
+PLAYWRIGHT_CHANNEL=chrome npm run test:browser -- tests/browser/ui-readability.spec.ts --grep 'readable welcome and centered HUD in tour at 320x640' --repeat-each=3
 ```
 
-`npm run test:browser` remains the all-in-one command, but the current observed run was interrupted as described above. If webServer startup stalls, check port ownership before starting your own `npm run dev` or stopping a process; never kill an unrelated server. Neither a product regression nor a permanent environment fix was established by these host startup/page-load failures.
+The current full development command passed **85/85**. On the earlier Windows host, separate fresh-process files/suites helped isolate long-lived Edge page-load stalls; the historical checkpoint did not establish a permanent environment fix. If webServer startup stalls, check port ownership before starting your own `npm run dev` or stopping a process; never kill an unrelated server.
 
-**Next work:** owner playtest of destination-bearing behavior and the connected journey. Preserve accepted driving and route rhythms; do not add unrelated features or retune the controller. The owner authorized this branch checkpoint/push only; owner gameplay acceptance, prototype production promotion, merge and deployment remain separate gates.
+**Next gates:** the primary reviews and performs the requested branch commit/push, independently verifying the resulting checkpoint. Owner visual approval is recorded above; hands-on destination-compass and complete connected-journey acceptance remain separate pending gates. Preserve accepted driving and route rhythms. Prototype production promotion, main merge and deployment remain unauthorized release steps.
 
 ## Historical development handoff — Three-stop Tour
 
