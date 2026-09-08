@@ -1,4 +1,4 @@
-import { point, road } from './authored-level';
+import { point, road, type AuthoredLevelDefinition } from './authored-level';
 import { RoadLevel } from './road-level';
 import { PLANET_RADIUS as R } from './math';
 
@@ -47,5 +47,5 @@ export const STATION_LEVEL = {
 export type { RoadRoute as StationRoute } from './road-level';
 
 export class StationLevel extends RoadLevel {
-  constructor() { super(STATION_LEVEL); }
+  constructor(anchor: AuthoredLevelDefinition['anchor'] = STATION_LEVEL.anchor) { super({ ...STATION_LEVEL, anchor: { ...anchor } }); }
 }

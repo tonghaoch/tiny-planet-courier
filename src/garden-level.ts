@@ -1,5 +1,5 @@
 import { CatmullRomCurve3, Vector3 } from 'three';
-import { point, road, type LevelPoint } from './authored-level';
+import { point, road, type AuthoredLevelDefinition, type LevelPoint } from './authored-level';
 import { RoadLevel, type RoadRoute } from './road-level';
 import { PLANET_RADIUS as R } from './math';
 
@@ -54,5 +54,5 @@ export const GARDEN_LEVEL = {
 } as const;
 
 export class GardenLevel extends RoadLevel {
-  constructor() { super(GARDEN_LEVEL); }
+  constructor(anchor: AuthoredLevelDefinition['anchor'] = GARDEN_LEVEL.anchor) { super({ ...GARDEN_LEVEL, anchor: { ...anchor } }); }
 }

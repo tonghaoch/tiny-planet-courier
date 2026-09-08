@@ -176,8 +176,11 @@ test('English labels and dialogs fit a small phone screen', async ({ page }) => 
   await expectTextFits(page, '.hero-copy, .start-button, .masthead');
   await page.getByRole('button', { name: 'Start delivering' }).click();
   const consoleBox = await page.locator('.driving-console').boundingBox();
-  const queueBox = await page.locator('.delivery-queue').boundingBox();
-  expect(consoleBox!.x + consoleBox!.width).toBeLessThanOrEqual(queueBox!.x);
+  // Progress now lives in the primary HUD; the duplicate queue yields on phones.
+  await expect(page.locator('.delivery-queue')).toBeHidden();
+  await expect(page.locator('#navigation-hud #mission-index')).toHaveText('01 / 03');
+  const timerBox = await page.locator('.run-time').boundingBox();
+  expect(consoleBox!.x + consoleBox!.width).toBeLessThanOrEqual(timerBox!.x);
   await page.getByRole('button', { name: 'Pause game' }).click();
   await expectTextFits(page, '.pause-modal, .modal-secondary');
   await page.getByRole('button', { name: 'Resume journey' }).click();

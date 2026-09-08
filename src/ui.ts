@@ -1,7 +1,11 @@
 import { DELIVERY_HOLD, DELIVERY_RADIUS, DELIVERY_SPEED, DeliveryRun, formatTime, readBest } from './game';
 import type { BayPhase } from './bay-types';
-import type { PrototypeDefinition } from './delivery-prototypes';
+import { PROTOTYPES, type PrototypeDefinition } from './delivery-prototypes';
+import { TOUR_RECORD_KEY, type TourSplit } from './tour-session';
+import type { TourStopId } from './tour-layout';
 import type { Destination } from './math';
+import { advanceNavigationHeading, arrivalActive, type GuidanceMode } from './navigation-presentation';
+export { unwrapNavigationHeading } from './navigation-presentation';
 
 export interface BayHUDState {
   phase: BayPhase;
@@ -9,6 +13,12 @@ export interface BayHUDState {
   onCoastalRoad: boolean;
   nearDestination: boolean;
   route?: 'outer' | 'inner' | null;
+  stopId?: TourStopId;
+  navigationPhase?: 'transfer' | 'local';
+  checkpointLabel?: string;
+  reverseToExit?: boolean;
+  /** Explicit for legacy altitude-based driving as well as authored surfaces. */
+  grounded?: boolean;
 }
 
 const icons = {
@@ -19,6 +29,8 @@ const icons = {
   pause: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 5v14M16 5v14"/></svg>',
   star: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4"><path d="m12 2 2.5 7.5L22 12l-7.5 2.5L12 22l-2.5-7.5L2 12l7.5-2.5L12 2Z"/></svg>',
 };
+
+interface ScreenRect { left: number; right: number; top: number; bottom: number }
 
 export class UI {
   readonly app = document.querySelector<HTMLDivElement>('#app')!;
@@ -32,6 +44,16 @@ export class UI {
   private prototypeResultReady = false;
   private soundEnabled = false;
   private readonly elements = new Map<string, HTMLElement>();
+  private visualHeading: number | null = null;
+  private commandedHeading: number | null = null;
+  private guidanceMode: GuidanceMode = 'hidden';
+  private arrival = false;
+  private readonly motionPreference = matchMedia('(prefers-reduced-motion: reduce)');
+  private hasTarget = false;
+  private geometryFrame = 0;
+  private markerSize = { width: 0, height: 0 };
+  private labelObstacles: ScreenRect[] = [];
+  private welcomeFrame = { x: 0, y: 0, diameter: 0 };
 
   get bayPrototype() { return this.prototype?.id === 'bay'; }
 
@@ -59,6 +81,7 @@ export class UI {
           <div class="eyebrow"><span></span>${prototype?.home.eyebrow ?? 'YOUR LITTLE SPACE ADVENTURE'}</div>
           <h1>${prototype?.home.title ?? 'Tiny planet.<br>Big <span class="warm-word">heart.</span>'}</h1>
           <p class="hero-description">${prototype?.home.description ?? 'One tiny planet. Three heartfelt deliveries.<br>Hop in your little van and take the scenic route.'}</p>
+          <div class="welcome-planet-space" aria-hidden="true"></div>
           <button class="start-button" data-action="start"><span class="start-icon">${icons.parcel}</span><span>Start delivering</span>${icons.arrow}</button>
           <p class="start-caption"><span class="tiny-dot"></span>No downloads<span>·</span>No time limit<span>·</span>Just explore</p>
           <div class="trip-ticket">
@@ -72,12 +95,16 @@ export class UI {
       </main>
 
       <section class="game-hud" aria-label="Delivery dashboard">
+        <section id="navigation-hud" class="navigation-hud" aria-label="Next delivery" aria-live="off" hidden>
+          <div class="navigation-destination"><span class="navigation-label">Next stop</span><h2 id="mission-name">${prototype?.destinationName ?? 'Sunrise Bakery'}</h2></div>
+          <span class="direction-disc" aria-hidden="true"><svg id="direction-arrow" viewBox="0 0 24 24" fill="currentColor"><path d="m12 3 7 17-7-4-7 4Z"/></svg><span id="direction-cue" hidden>P</span></span>
+          <div class="navigation-distance"><strong id="mission-distance">0 m</strong><span id="mission-index">01 / —</span></div>
+          <p id="mission-hint">${prototype?.hints.choice ?? 'Take the scenic route'}</p>
+          <div class="delivery-meter" aria-hidden="true"><span id="delivery-meter"></span></div>
+        </section>
         <div class="mission-card">
-          <div class="mission-top"><span>Out for delivery</span><span id="mission-index">01 / —</span></div>
-          <h2 id="mission-name">${prototype?.destinationName ?? 'Sunrise Bakery'}</h2>
+          <div class="mission-top"><span>Your parcel</span></div>
           <p id="mission-parcel">${prototype?.parcelDescription ?? 'A bag of warm croissants'}</p>
-          <div class="mission-navigation"><span class="direction-disc"><svg id="direction-arrow" viewBox="0 0 24 24" fill="currentColor"><path d="m12 3 7 17-7-4-7 4Z"/></svg></span><div><strong id="mission-distance">0 m</strong><small id="mission-hint">${prototype?.hints.choice ?? 'Take the scenic route'}</small></div></div>
-          <div class="delivery-meter"><span id="delivery-meter"></span></div>
         </div>
         <div class="run-time"><span>Journey time</span><strong id="run-time">00:00</strong></div>
         <div class="driving-console">
@@ -85,7 +112,7 @@ export class UI {
           <span class="console-divider"></span>
           <div class="boost-readout"><div><span>Stardust boost</span><kbd>SPACE</kbd></div><div class="boost-track"><span id="boost-level"></span></div></div>
         </div>
-        <div class="delivery-queue"><span>${prototype ? 'One little mission' : 'Little missions'}</span><div id="queue-stops"></div></div>
+        <div class="delivery-queue"><span>${prototype && prototype.id !== 'tour' ? 'One little mission' : 'Little missions'}</span><div id="queue-stops"></div></div>
         <div class="drive-hint"><kbd>W A S D</kbd> Drive<span>·</span><kbd>S</kbd> Brake / Reverse<span>·</span><kbd>R</kbd> Recover<span>·</span><kbd>ESC</kbd> Pause</div>
       </section>
 
@@ -100,7 +127,7 @@ export class UI {
           <span class="modal-illustration">${icons.planet}</span><span class="eyebrow">TAKE A LITTLE BREAK</span>
           <h2 id="pause-title">The planet can wait.</h2><p>Take a breath. Your ${prototype ? 'parcel' : 'parcels'} and the view will be here.</p>
           <button class="start-button" data-action="resume">Resume journey ${icons.arrow}</button>
-          <div class="modal-secondary"><button data-action="restart">Restart delivery</button><button data-action="home">Back to home</button></div>
+          <div class="modal-secondary"><button data-action="restart">${prototype?.id === 'tour' ? 'Restart tour' : 'Restart delivery'}</button><button data-action="home">Back to home</button></div>
         </div>
       </section>
       <section class="modal-backdrop" data-view="complete" hidden>
@@ -122,6 +149,14 @@ export class UI {
         <button class="start-button" data-action="restart">Try another route ${icons.arrow}</button>
         <small class="bay-result-caption">Keep driving, or take another lap.</small>
       </section>
+      <section id="tour-result" class="tour-result" aria-label="Tour result" hidden>
+        <h2>Three smiles, delivered.</h2>
+        <div class="tour-totals"><span>Total <strong id="tour-result-time">00:00</strong></span><span>Best <strong id="tour-best-time">—</strong></span></div>
+        <ol id="tour-splits" aria-label="Tour leg splits"></ol>
+        <span id="tour-record-label" role="status" aria-live="polite"></span>
+        <button class="start-button" data-action="restart">Restart tour ${icons.arrow}</button>
+        <small>Keep driving. The road returns to the bay.</small>
+      </section>
       <div id="toast" class="toast" role="status" aria-live="polite"><span>${icons.star}</span><div id="toast-message"></div></div>
       <section id="error-panel" class="error-panel" hidden role="alert"><span>${icons.planet}</span><h2>The planet cannot launch yet.</h2><p id="error-message"></p><button class="start-button" data-action="reload">Reload ${icons.arrow}</button></section>
       <footer class="footer home-footer"><span>A LITTLE ESCAPE FROM THE EVERYDAY.</span><div class="footer-controls"><span><kbd>W A S D</kbd> Drive</span><span><kbd>SPACE</kbd> Stardust boost</span></div><span class="made-for">MADE FOR THE WANDERER IN YOU ${icons.star}</span></footer>
@@ -133,11 +168,100 @@ export class UI {
       const button = (event.target as HTMLElement).closest<HTMLElement>('[data-action]');
       if (button) this.onAction(button.dataset.action!);
     });
+    const geometryObserver = new ResizeObserver(() => this.invalidateGeometry());
+    this.app.querySelectorAll<HTMLElement>('.masthead, .hero-copy, .hero-description, .hero-copy > .start-button, .navigation-hud, .mission-card, .run-time, .touch-controls, .driving-console, .delivery-queue, .drive-hint, .toast, .bay-result, .tour-result').forEach(element => geometryObserver.observe(element));
+    window.addEventListener('resize', () => this.invalidateGeometry());
+    this.app.querySelector('.home-view')!.addEventListener('scroll', () => this.invalidateGeometry(), { passive: true });
+    document.fonts.ready.then(() => this.invalidateGeometry());
+    this.motionPreference.addEventListener('change', () => {
+      if (this.motionPreference.matches && this.commandedHeading !== null) {
+        this.visualHeading = this.commandedHeading;
+        this.paintHeading();
+      }
+    });
     this.setMode('home');
+  }
+
+  /** Passive presentation diagnostics, with no navigation selection or layout reads. */
+  getNavigationPresentation() {
+    return { mode: this.lastMode === 'playing' && this.hasTarget ? this.guidanceMode : 'hidden' as GuidanceMode,
+      commandedHeading: this.commandedHeading, displayedHeading: this.visualHeading, arrival: this.arrival };
+  }
+
+  /** Snap the next command after a discontinuous pose or target reset. */
+  resetNavigationPresentation() {
+    this.arrival = false;
+    this.visualHeading = null;
+    this.commandedHeading = null;
+    this.guidanceMode = 'hidden';
+    this.elements.get('direction-arrow')!.toggleAttribute('hidden', true);
+    this.elements.get('direction-cue')!.hidden = true;
+  }
+
+  /** Called by the existing render tick; pause freezes the rendered angle. */
+  advanceNavigation(dt: number) {
+    if (this.lastMode !== 'playing' || this.guidanceMode !== 'steering' || this.commandedHeading === null) return;
+    this.visualHeading = advanceNavigationHeading(this.visualHeading, this.commandedHeading, dt, this.motionPreference.matches);
+    this.paintHeading();
+  }
+
+  private paintHeading() {
+    if (this.visualHeading !== null) this.elements.get('direction-arrow')!.style.transform = `rotate(${this.visualHeading}rad)`;
+  }
+
+  /** Cached welcome-only planet slot; no layout read in the render loop. */
+  getWelcomeFrame() { return this.welcomeFrame; }
+
+  /** The world beacon stays intact; only its duplicated text yields to screen UI. */
+  canShowTargetLabel(x: number, y: number) {
+    const rect = { left: x - this.markerSize.width / 2, right: x + this.markerSize.width / 2, top: y - this.markerSize.height, bottom: y + 16 };
+    return this.lastMode === 'playing' && this.hasTarget && !this.app.classList.contains('has-error')
+      && rect.left >= 8 && rect.right <= window.innerWidth - 8
+      && !this.labelObstacles.some(other => rect.left < other.right + 8 && rect.right > other.left - 8 && rect.top < other.bottom + 8 && rect.bottom > other.top - 8);
+  }
+
+  private invalidateGeometry() {
+    if (this.geometryFrame) return;
+    this.geometryFrame = requestAnimationFrame(() => {
+      this.geometryFrame = 0;
+      const width = window.innerWidth, height = window.innerHeight;
+      if (this.lastMode === 'home') {
+        const hero = this.app.querySelector('.hero-copy')!.getBoundingClientRect();
+        const description = this.app.querySelector('.hero-description')!.getBoundingClientRect();
+        const button = this.app.querySelector('.hero-copy > .start-button')!.getBoundingClientRect();
+        const portrait = width / height < 0.94;
+        this.welcomeFrame = portrait
+          ? { x: width / 2, y: (description.bottom + button.top) / 2, diameter: Math.max(80, Math.min(width * 0.8, button.top - description.bottom - 24)) }
+          : { x: (hero.right + width) / 2, y: height * 0.51, diameter: Math.min((width - hero.right) * 0.88, height * 0.68) };
+      }
+      const navigation = this.elements.get('navigation-hud')!;
+      const bottom = navigation.hidden ? (height <= 500 ? 68 : 100) : navigation.getBoundingClientRect().bottom;
+      this.app.style.setProperty('--navigation-bottom', `${bottom}px`);
+      this.labelObstacles = [];
+      this.app.querySelectorAll<HTMLElement>('.masthead, .navigation-hud, .mission-card, .run-time, .touch-controls, .driving-console, .delivery-queue, .drive-hint, .toast.visible, .bay-result, .tour-result').forEach(element => {
+        const rect = element.getBoundingClientRect();
+        if (rect.width && rect.height) this.labelObstacles.push(rect);
+      });
+      // Measure only when invalidated, even if the projected label is currently hidden.
+      const hidden = this.marker.hidden;
+      this.marker.style.visibility = 'hidden';
+      this.marker.hidden = false;
+      const marker = this.marker.getBoundingClientRect();
+      this.markerSize = { width: marker.width, height: marker.height };
+      this.marker.hidden = hidden;
+      this.marker.style.visibility = '';
+    });
+  }
+
+  private syncNavigationVisibility() {
+    this.elements.get('navigation-hud')!.hidden = this.lastMode !== 'playing' || !this.hasTarget || this.app.classList.contains('has-error');
+    this.invalidateGeometry();
   }
 
   setDestinations(destinations: Destination[]) {
     this.deliveryCount = destinations.length;
+    this.hasTarget = destinations.length > 0;
+    this.syncNavigationVisibility();
     this.targetId = '';
     this.text('parcel-count', String(this.deliveryCount).padStart(2, '0'));
     this.elements.get('queue-stops')!.innerHTML = destinations.map((_destination, i) => `<span class="queue-stop" data-stop="${i}">${icons.parcel}<span>${String(i + 1).padStart(2, '0')}</span></span>`).join('<span class="queue-line"></span>');
@@ -150,8 +274,13 @@ export class UI {
   resetJourney() {
     this.prototypeResultReady = false;
     this.targetId = '';
+    this.resetNavigationPresentation();
+    this.hasTarget = false;
+    this.syncNavigationVisibility();
     this.app.dataset.delivered = 'false';
     this.elements.get('bay-result')!.hidden = true;
+    this.elements.get('tour-result')!.hidden = true;
+    this.elements.get('tour-splits')!.replaceChildren();
     clearTimeout(this.toastTimer);
     this.elements.get('toast')!.classList.remove('visible');
   }
@@ -165,7 +294,9 @@ export class UI {
     if (this.lastMode === mode) return;
     this.lastMode = mode;
     this.app.dataset.mode = mode;
-    this.elements.get('bay-result')!.hidden = !this.prototypeResultReady || mode !== 'playing';
+    this.syncNavigationVisibility();
+    this.elements.get('bay-result')!.hidden = this.prototype?.id === 'tour' || !this.prototypeResultReady || mode !== 'playing';
+    this.elements.get('tour-result')!.hidden = this.prototype?.id !== 'tour' || !this.prototypeResultReady || mode !== 'playing';
     this.app.querySelectorAll<HTMLElement>('[data-view]').forEach(element => element.hidden = element.dataset.view !== mode);
     this.marker.hidden = true;
     if (mode === 'paused') this.app.querySelector<HTMLButtonElement>('[data-action="resume"]')?.focus();
@@ -182,42 +313,75 @@ export class UI {
     this.text('sound-label', enabled ? 'Sound on' : 'Sound off');
   }
 
-  update(run: DeliveryRun, speed: number, charge: number, distance: number, heading: number, driveState?: BayHUDState) {
+  update(run: DeliveryRun, speed: number, charge: number, distance: number, heading: number | null, driveState?: BayHUDState) {
     this.setMode(run.mode);
+    if (this.hasTarget !== Boolean(run.target)) {
+      this.hasTarget = Boolean(run.target);
+      this.syncNavigationVisibility();
+    }
     this.text('run-time', formatTime(run.elapsed));
     this.text('speed', Math.round(Math.abs(speed) * 9).toString().padStart(2, '0'));
     this.elements.get('boost-level')!.style.transform = `scaleX(${charge})`;
     this.elements.get('delivery-meter')!.style.transform = `scaleX(${Math.min(1, run.parkedFor / DELIVERY_HOLD)})`;
+    const localPrototype = this.prototype?.id === 'tour' && driveState?.stopId ? PROTOTYPES[driveState.stopId] : this.prototype;
     if (run.target) {
       this.setTarget(run.target, run.index);
       this.text('mission-distance', `${Math.round(distance * 10)} m`);
-      let hint = distance < DELIVERY_RADIUS ? (Math.abs(speed) < DELIVERY_SPEED ? 'Parked. Delivering a little joy…' : 'Brake to make your delivery.') : 'Follow the arrow to the glow.';
-      if (this.prototype?.id === 'station' || this.prototype?.id === 'garden') {
-        if (driveState?.phase === 'recovering') hint = this.prototype.hints.recovery;
+      const recovering = driveState?.phase === 'recovering';
+      const grounded = driveState?.grounded ?? (driveState ? driveState.phase === 'grounded' : false);
+      this.arrival = !recovering && arrivalActive(this.arrival, distance, grounded);
+      const nextMode: GuidanceMode = recovering ? 'recovering' : this.arrival ? 'parking' : heading === null ? 'hidden' : 'steering';
+      if (nextMode !== this.guidanceMode) this.visualHeading = null;
+      this.guidanceMode = nextMode;
+      this.commandedHeading = nextMode === 'steering' ? heading : null;
+      this.elements.get('navigation-hud')!.dataset.guidance = nextMode;
+      this.elements.get('direction-arrow')!.toggleAttribute('hidden', nextMode !== 'steering');
+      this.elements.get('direction-cue')!.hidden = nextMode !== 'parking' && nextMode !== 'recovering';
+      this.text('direction-cue', nextMode === 'recovering' ? '···' : 'P');
+      let hint = 'Destination compass. Choose your own road.';
+      if (this.prototype?.id === 'tour' && driveState?.phase === 'recovering') {
+        hint = `Back at ${driveState.checkpointLabel}. Your deliveries are safe.`;
+      } else if (this.prototype?.id === 'tour' && driveState?.navigationPhase === 'transfer') {
+        hint = driveState.reverseToExit ? 'Next road is behind you. Reverse and turn gently.'
+          : `Follow the connecting road to ${run.target.name}.`;
+      } else if (localPrototype?.id === 'station' || localPrototype?.id === 'garden') {
+        if (driveState?.phase === 'recovering') hint = localPrototype.hints.recovery;
         else if (distance >= DELIVERY_RADIUS) {
           const nearDestination = driveState?.nearDestination ?? distance < 2.6;
-          hint = nearDestination ? this.prototype.hints.nearDestination
-            : driveState?.route === 'outer' ? this.prototype.hints.outer
-            : driveState?.route === 'inner' ? this.prototype.hints.inner
-            : this.prototype.hints.choice;
+          hint = nearDestination ? localPrototype.hints.nearDestination
+            : driveState?.route === 'outer' ? localPrototype.hints.outer
+            : driveState?.route === 'inner' ? localPrototype.hints.inner
+            : localPrototype.hints.choice;
         }
-      } else if (this.prototype && driveState) {
+      } else if (localPrototype && driveState) {
         if (driveState.phase === 'recovering') hint = 'Back to the fork. Your parcel is safe.';
         else if (driveState.phase === 'airborne') hint = 'A little steer. Aim for the sand.';
-        else if (driveState.onRamp) hint = this.prototype.hints.inner;
-        else if (distance >= DELIVERY_RADIUS) hint = driveState.nearDestination ? this.prototype.hints.nearDestination : driveState.onCoastalRoad ? this.prototype.hints.outer : this.prototype.hints.choice;
+        else if (driveState.onRamp) hint = localPrototype.hints.inner;
+        else if (distance >= DELIVERY_RADIUS) hint = driveState.nearDestination ? localPrototype.hints.nearDestination : driveState.onCoastalRoad ? localPrototype.hints.outer : localPrototype.hints.choice;
       }
+      // Arrival/recovery semantics override route hints, but never delivery eligibility.
+      if (recovering) hint = 'Recovering. Your parcel is safe.';
+      else if (this.arrival) hint = distance >= DELIVERY_RADIUS ? 'Move back into the ring to deliver.'
+        : Math.abs(speed) >= DELIVERY_SPEED ? 'Brake to make your delivery.' : 'Hold still to deliver a little joy…';
+      else if (heading === null) hint = 'Above the delivery. Land, then park.';
       this.text('mission-hint', hint);
-      this.elements.get('direction-arrow')!.style.transform = `rotate(${heading}rad)`;
-    } else if (this.prototype && run.finished) this.text('mission-hint', 'Handing over a little joy…');
-    if (this.prototype && driveState) {
+      if (this.commandedHeading !== null && (this.visualHeading === null || this.motionPreference.matches)) {
+        this.visualHeading = this.commandedHeading;
+        this.paintHeading();
+      }
+    } else {
+      this.resetNavigationPresentation();
+      if (this.prototype && run.finished) this.text('mission-hint', this.prototype.id === 'tour' ? 'All delivered. Keep exploring.' : 'Handing over a little joy…');
+    }
+    if (localPrototype && driveState) {
       const driveLabel = driveState.phase === 'recovering' ? 'A fresh start'
-        : this.bayPrototype && driveState.phase === 'airborne' ? 'Airborne'
-        : this.bayPrototype && driveState.onRamp ? 'Ready to leap'
-        : this.prototype.id === 'station' && driveState.route === 'inner' ? 'Tight turns'
-        : this.prototype.id === 'station' && driveState.route === 'outer' ? 'Outer road'
-        : this.prototype.id === 'garden' && driveState.route === 'inner' ? 'Flower path'
-        : this.prototype.id === 'garden' && driveState.route === 'outer' ? 'Garden loop' : 'Cruising';
+        : driveState.navigationPhase === 'transfer' ? 'Connecting road'
+        : localPrototype.id === 'bay' && driveState.phase === 'airborne' ? 'Airborne'
+        : localPrototype.id === 'bay' && driveState.onRamp ? 'Ready to leap'
+        : localPrototype.id === 'station' && driveState.route === 'inner' ? 'Tight turns'
+        : localPrototype.id === 'station' && driveState.route === 'outer' ? 'Outer road'
+        : localPrototype.id === 'garden' && driveState.route === 'inner' ? 'Flower path'
+        : localPrototype.id === 'garden' && driveState.route === 'outer' ? 'Garden loop' : 'Cruising';
       this.text('drive-state', driveLabel);
     }
     this.app.querySelectorAll<HTMLElement>('[data-stop]').forEach(stop => {
@@ -230,10 +394,12 @@ export class UI {
   private setTarget(target: Destination, index: number) {
     if (this.targetId === `${target.id}:${index}`) return;
     this.targetId = `${target.id}:${index}`;
+    this.resetNavigationPresentation();
     this.text('mission-index', `${String(index + 1).padStart(2, '0')} / ${String(this.deliveryCount).padStart(2, '0')}`);
     this.text('mission-name', target.name);
     this.text('mission-parcel', target.parcel);
     this.text('marker-label', target.name);
+    this.invalidateGeometry();
   }
 
   showResults(elapsed: number, newRecord: boolean) {
@@ -267,17 +433,43 @@ export class UI {
     this.elements.get('bay-result')!.hidden = this.lastMode !== 'playing';
   }
 
+  /** Nonblocking: use the session's completed splits, never an independent UI timer. */
+  showTourResults(elapsed: number, splits: readonly TourSplit[], newRecord: boolean) {
+    if (this.prototype?.id !== 'tour') return;
+    this.prototypeResultReady = true;
+    this.app.dataset.delivered = 'true';
+    clearTimeout(this.toastTimer);
+    this.elements.get('toast')!.classList.remove('visible');
+    this.text('tour-result-time', formatTime(elapsed, true));
+    const best = readBest(TOUR_RECORD_KEY);
+    this.text('tour-best-time', best === null ? '—' : formatTime(best, true));
+    this.elements.get('tour-splits')!.replaceChildren(...splits.map(split => {
+      const row = document.createElement('li');
+      const name = document.createElement('span');
+      name.textContent = PROTOTYPES[split.stopId].destinationName;
+      const time = document.createElement('strong');
+      time.textContent = formatTime(split.elapsed, true);
+      row.append(name, time);
+      return row;
+    }));
+    this.text('tour-record-label', newRecord ? 'A new tour best!' : 'All three parcels delivered.');
+    this.elements.get('tour-result')!.hidden = this.lastMode !== 'playing';
+  }
+
   toast(message: string) {
     this.text('toast-message', message);
     const toast = this.elements.get('toast')!;
     toast.classList.add('visible');
     clearTimeout(this.toastTimer);
-    this.toastTimer = window.setTimeout(() => toast.classList.remove('visible'), 3600);
+    this.invalidateGeometry();
+    this.toastTimer = window.setTimeout(() => { toast.classList.remove('visible'); this.invalidateGeometry(); }, 3600);
   }
 
   showError(message: string) {
     this.text('error-message', message);
     this.elements.get('error-panel')!.hidden = false;
     this.app.classList.add('has-error');
+    this.syncNavigationVisibility();
+    this.marker.hidden = true;
   }
 }

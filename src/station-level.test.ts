@@ -45,7 +45,7 @@ describe('authored Station ground routes', () => {
     expect(level.toLocal(inner.target).x).toBeGreaterThan(-5.5);
     expect(level.toLocal(inner.target).y).toBeGreaterThan(0);
     expect(level.navigation(level.recoveryPose.normal, 'outer').route).toBeNull();
-    expect(level.navigation(normal(-0.5), 'inner').target).toBe(level.destination.normal);
+    expect(level.navigation(normal(-0.5), 'inner').target.distanceTo(level.destination.normal)).toBeLessThan(1e-12);
   });
 });
 

@@ -21,6 +21,8 @@ export class Vehicle {
   private readonly axles: THREE.Group[] = [];
   private readonly frontWheels: THREE.Group[] = [];
   private readonly parcel = new THREE.Group();
+  private readonly parcels: THREE.Group[] = [this.parcel];
+  private cargoCapacity: 1 | 3 = 1;
   private readonly dust: THREE.Mesh[] = [];
   private readonly dustLives: number[] = [];
   private dustCursor = 0;
@@ -79,6 +81,12 @@ export class Vehicle {
     box(0.075, 0.25, 0.36, cream, [0, 0, 0], this.parcel);
     box(0.17, 0.10, 0.006, cream, [0.07, 0, 0.18], this.parcel);
     this.body.add(this.parcel);
+    for (let i = 1; i < 3; i++) {
+      const extra = this.parcel.clone(true);
+      extra.visible = false;
+      this.parcels.push(extra);
+      this.body.add(extra);
+    }
     for (const x of [-0.35, 0.35]) {
       for (const z of [-0.36, 0.38]) {
         const axle = new THREE.Group();
@@ -147,12 +155,43 @@ export class Vehicle {
     this.steerVisual = this.drive.steer;
   }
 
-  get cargoVisible() { return this.parcel.visible; }
+  get cargoVisible() { return this.cargoCount > 0; }
+  get cargoCount() { return this.parcels.filter(parcel => parcel.visible).length; }
   get landingGuideVisible() { return this.landingMarker.visible; }
-  setCargoVisible(visible: boolean) { this.parcel.visible = visible; }
+
+  /** Select the small Tour rack or the original single parcel; refill on a fresh run. */
+  setCargoCapacity(capacity: 1 | 3) {
+    this.cargoCapacity = capacity;
+    this.parcels.forEach((parcel, i) => {
+      parcel.scale.setScalar(capacity === 3 ? 0.62 : 1);
+      parcel.position.set(capacity === 3 ? [-0.17, 0.17, 0][i] : 0, 0.97,
+        capacity === 3 ? [-0.21, -0.21, 0.12][i] : -0.1);
+    });
+    this.setCargoVisible(true);
+  }
+
+  setCargoVisible(visible: boolean) {
+    this.parcels.forEach((parcel, i) => { parcel.visible = visible && i < this.cargoCapacity; });
+  }
+
   getParcelWorldPosition(): THREE.Vector3 {
     this.root.updateWorldMatrix(true, true);
-    return this.parcel.getWorldPosition(new THREE.Vector3());
+    return (this.parcels.find(parcel => parcel.visible) ?? this.parcel).getWorldPosition(new THREE.Vector3());
+  }
+
+  getCargoWorldPositions(): THREE.Vector3[] {
+    this.root.updateWorldMatrix(true, true);
+    return this.parcels.filter(parcel => parcel.visible).map(parcel => parcel.getWorldPosition(new THREE.Vector3()));
+  }
+
+  /** Capture the actual rack origin before hiding exactly one parcel. Empty racks are inert. */
+  consumeParcel(): THREE.Vector3 | null {
+    const parcel = this.parcels.find(parcel => parcel.visible);
+    if (!parcel) return null;
+    this.root.updateWorldMatrix(true, true);
+    const origin = parcel.getWorldPosition(new THREE.Vector3());
+    parcel.visible = false;
+    return origin;
   }
 
   reset() {
@@ -170,8 +209,8 @@ export class Vehicle {
     this.prediction = null;
     this.landingMarker.visible = false;
     this.airShadow.visible = false;
-    this.parcel.visible = true;
-    this.parcel.position.y = 0.97;
+    this.setCargoCapacity(this.cargoCapacity);
+    this.parcels.forEach(parcel => parcel.rotation.set(0, 0, 0));
     this.body.position.y = 0;
     this.body.rotation.set(0, 0, 0);
     this.root.visible = true;
@@ -292,6 +331,10 @@ export class Vehicle {
       this.body.rotation.x = this.boosting ? -0.055 : Math.sin(time * 16) * Math.abs(this.speed) * 0.003;
       this.parcel.rotation.z = Math.sin(time * 8) * Math.abs(this.speed) * 0.008;
     }
+    this.parcels.slice(1).forEach(parcel => {
+      parcel.position.y = this.parcel.position.y;
+      parcel.rotation.z = this.parcel.rotation.z;
+    });
     this.wheels.forEach(wheel => wheel.rotation.x += this.speed * dt / 0.19);
     this.frontWheels.forEach(axle => axle.rotation.y = -this.steerVisual * 0.35);
     this.trailClock += dt;

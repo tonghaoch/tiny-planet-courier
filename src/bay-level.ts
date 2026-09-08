@@ -1,5 +1,7 @@
+import { Vector3 } from 'three';
+import { branchNavigation, type BranchNavigation, type NavigationContext } from './route-guidance';
 import { PLANET_RADIUS as R } from './math';
-import { AuthoredLevel, point, road } from './authored-level';
+import { AuthoredLevel, point, road, type AuthoredLevelDefinition } from './authored-level';
 export { inLevelPolygon as inBayPolygon, type LevelPoint as BayPoint } from './authored-level';
 
 const footprintPolygon = [point(-11, -6), point(12, -6), point(12, 9), point(-11, 9)];
@@ -49,13 +51,22 @@ export const BAY_LEVEL = {
   reactionDuration: 2.65,
 } as const;
 
+export type BayRoute = 'coast' | 'leap';
+
 export class BayLevel extends AuthoredLevel {
   readonly safeRoute = this.route(safeCenterline);
   readonly jumpRoute = this.route(jumpCenterline);
 
-  constructor() {
+  navigation(normal: Vector3, previous: BayRoute | null = null, context: NavigationContext = {}): BranchNavigation<BayRoute> {
+    return branchNavigation(normal, previous, context,
+      { leap: this.jumpRoute, coast: this.safeRoute }, ['leap', 'coast'],
+      this.toNormal(fork.x, fork.y), this.spawnPose.normal, this.destination.normal);
+  }
+
+  constructor(anchor: AuthoredLevelDefinition['anchor'] = BAY_LEVEL.anchor) {
     super({
       ...BAY_LEVEL,
+      anchor: { ...anchor },
       destination: { id: 'bakery', name: 'Sunrise Bakery', label: 'SUNRISE BAKERY', parcel: 'A bag of warm croissants', color: 0xf6b87b },
     });
   }

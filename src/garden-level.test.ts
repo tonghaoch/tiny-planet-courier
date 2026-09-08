@@ -56,7 +56,7 @@ describe('flowing Garden routes', () => {
     expect(level.toLocal(inner.target).x).toBeGreaterThan(-6.4);
     expect(level.toLocal(inner.target).y).toBeGreaterThan(0);
     expect(level.navigation(level.recoveryPose.normal, 'inner').route).toBeNull();
-    expect(level.navigation(normal(-0.5), 'outer').target).toBe(level.destination.normal);
+    expect(level.navigation(normal(-0.5), 'outer').target.distanceTo(level.destination.normal)).toBeLessThan(1e-12);
   });
 });
 

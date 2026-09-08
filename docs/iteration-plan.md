@@ -1,6 +1,149 @@
 # Delivery prototypes — iteration plan and handoff
 
-## Current checkpoint
+## Current checkpoint and cross-computer handoff — 2026-09-08
+
+**The owner authorized this branch checkpoint/push:** `prototype/three-stop-tour` at origin `https://github.com/tonghaoch/tiny-planet-courier.git`. This checkpoint includes the whole connected Tour, readability/glass HUD and destination compass, based on accepted slices `412ef66`; use this branch, **not the older `prototype/bay-leap` checkpoint**. The previous main/Pages baseline remains `8656d31`; production remains original-only, with no prototype promotion, merge or Pages deployment authorized.
+
+The primary handles and verifies the commit/push after these documentation edits; this handoff does not claim that operation already succeeded. Identify the received revision with `git log -1 --oneline` after cloning/pulling, rather than a self-referential checkpoint hash. **Owner hands-on approval of the destination compass and connected journey remains pending.** A checkpoint/push request is not gameplay acceptance or permission to release to `main`.
+
+### Continue on another computer
+
+Recommend **Node.js 24**. Fresh clone:
+
+```sh
+git clone --branch prototype/three-stop-tour https://github.com/tonghaoch/tiny-planet-courier.git
+cd tiny-planet-courier
+git log -1 --oneline
+npm ci
+npm run dev
+```
+
+For an existing clone, **first preserve any local work**. Do not automatically discard or stash it. Then:
+
+```sh
+git fetch origin
+git switch prototype/three-stop-tour
+# If the local branch is missing, use this instead of the switch above:
+# git switch --track origin/prototype/three-stop-tour
+git pull --ff-only origin prototype/three-stop-tour
+git log -1 --oneline
+npm ci
+npm run dev
+```
+
+If switching or fast-forwarding is blocked by local work/divergence, stop and resolve it deliberately; do not use `reset --hard`.
+
+- **Main playtest:** http://127.0.0.1:5173/?prototype=tour
+- **Original comparison:** http://127.0.0.1:5173/; Bay, Station and Garden remain independently selectable with `?prototype=bay`, `?prototype=station` and `?prototype=garden`.
+- **Use `npm run dev`, not `npm run preview`, for Tour.** Production/preview deliberately ignore prototype selectors and show the original game without the test bridge.
+- Browser bests/`localStorage` do not transfer. Ignored screenshots, test outputs and dependencies do not transfer either; regenerate dependencies with `npm ci` and artifacts with tests. Local review images under `artifacts/destination-navigation-review/` are not shipped assets or dependencies.
+- The game needs no local agent worktrees, models, credentials or backend. Agent collaboration policy is the committed `AGENTS.md`, discovered through the `CLAUDE.md` pointer.
+
+### Current destination-compass contract
+
+- In original/Bay/Station/Garden/Tour, steering points at active `run.target.normal` using vehicle-relative spherical `headingTo(vehicle.normal, vehicle.forward, run.target.normal)`. Destination name, distance and snapshot targets describe that same delivery. The arrow may point across water or obstacles by design; players choose their own safe route.
+- Road caches feed hints/context and road-aware `reverseToExit`, not the compass. A destination behind the van does not imply that the road exit is behind it. Tour handoffs immediately retarget the next destination.
+- Shortest-arc frame-independent smoothing, reduced motion, glass HUD, parking/recovery cues and hidden home/pause/completed navigation remain intact. A coincident airborne destination has no invented heading. R, splash recovery, restart, home and handoffs clear stale navigation state.
+- Tour continuity, three parcels, splits, earned checkpoints and accepted route geometry/physics are unchanged. Pose fixtures isolate UI/target behavior, not route playability; real-input route tests provide the latter evidence. See [navigation-stability-plan.md](navigation-stability-plan.md).
+
+### Current verification — primary-supplied results
+
+These checks were run by the primary, **not the documentation-only worker**, with **Node v24.18.0, npm 11.16.0 and local Microsoft Edge**.
+
+**All 85 distinct development cases have passing observations across sequential runs (42 + 1 + 42), NOT a clean 85/85 all-in-one command.** Keep this limitation when reporting readiness.
+
+| Check | Observed result |
+| --- | --- |
+| `npm test` | **192 passed in 21 files.** |
+| `npm run build` | TypeScript and production build passed; only the existing >500kB bundle warning (JS about 683kB, gzip 181kB). |
+| Initial focused navigation | **20/23 passed, 3 failed.** Bounded repair retained strict browser-target equality, used 12-decimal tolerance for independently generated Node coordinates (a `Math.sin` difference around 1e-16), and waited for normal captured guidance after R. No gameplay or timeout relaxation; all 3 affected cases passed the focused rerun. |
+| Full development command | Attempted all **85** cases. First **42 passed**, including all **23 current navigation cases**, original/standalone route tests and desktop wide/short real-input Tours plus closing road. Case 43, the existing 320px Tour case, timed out at **45s in initial `page.goto`**, before gameplay/layout assertions; trace confirmed this. The primary stopped the long-running command. |
+| Identical 320px Tour, fresh browser | **3/3 passed** in 14.6/13.3/17.7s, without code changes or timeout increases. |
+| Separate UI-readability suite | **42/42 passed**, including normal/fallback/reduced glass, all modes/viewports, touch/focus/scroll and real Bay launches. An initial attempt started no tests because Playwright's webServer hit its 30s startup timeout. The primary checked port ownership, started its own Vite server (ready about 1.4s), then ran the passing suite; no assertions or timeouts changed. |
+| `npm run test:preview`, after UI checks | **6/6 production-isolation cases passed**, including Tour/unknown selectors, original game and no bridge. |
+
+The primary independently compared the **actual rendered DOM arrow angle** with an independent destination-bearing formula in all five modes, both Tour target transitions and mobile, with no browser errors, and reviewed desktop/mobile screenshots. These UI/target-isolation fixtures do not prove route playability; use the real-input results above for that claim.
+
+### Reproduce checks and host limitations
+
+Run browser suites and production-preview checks **sequentially**, never concurrently. Edge is the default; if Chrome is installed, prefix browser/preview commands with `PLAYWRIGHT_CHANNEL=chrome` (bash syntax). For this Windows host, prefer separate files/suites in fresh processes if a long-lived Edge session stalls page loads:
+
+```sh
+npm test
+npm run build
+npm run test:browser -- tests/browser/game.spec.ts
+npm run test:browser -- tests/browser/navigation.spec.ts
+npm run test:browser -- tests/browser/tour.spec.ts
+npm run test:browser -- tests/browser/tour.spec.ts --grep '320px Tour' --repeat-each=3
+npm run test:browser -- tests/browser/ui-readability.spec.ts
+npm run test:preview
+```
+
+`npm run test:browser` remains the all-in-one command, but the current observed run was interrupted as described above. If webServer startup stalls, check port ownership before starting your own `npm run dev` or stopping a process; never kill an unrelated server. Neither a product regression nor a permanent environment fix was established by these host startup/page-load failures.
+
+**Next work:** owner playtest of destination-bearing behavior and the connected journey. Preserve accepted driving and route rhythms; do not add unrelated features or retune the controller. The owner authorized this branch checkpoint/push only; owner gameplay acceptance, prototype production promotion, merge and deployment remain separate gates.
+
+## Historical development handoff — Three-stop Tour
+
+The records below describe earlier phases, including their then-current no-commit/no-push status and road-following verification. They do not override the current checkpoint authorization, destination-compass contract or verification above.
+
+- **Working branch:** `prototype/three-stop-tour`, based on accepted slice baseline `412ef66`.
+- **Entry:** http://127.0.0.1:5173/?prototype=tour (Vite development mode only).
+- **Status:** Implementation is complete for local Tour playtesting, and the coordinator independently verified the integrated implementation after both workers finished. Owner feedback on the connected journey and explicit release authorization remain pending. No commits, pushes, merges or deployments have been made this iteration; public Pages remains untouched. The accepted independent slices and their records are preserved.
+- **Approved scope:** One continuous Bakery → Station → Garden journey on one planet, using the accepted local routes/controller, three visible parcels, independent handoffs and a nonblocking final summary. The approved design is recorded in [tour-plan.md](tour-plan.md).
+- **Runtime integration:** `TourSession` owns delivery order, active elapsed time, three transfer-inclusive splits and earned checkpoints. Main assigns World recovery from the session on start/home, handoff and grounded entrance changes; recovery does not restart the tour or unlock a future stop. Navigation originally used the active leg's `TourLayout.navigation` cache for steering; the current follow-up retains that cache only as road context and points the compass at the destination. Nothing resets van position, heading, speed or charge at a handoff.
+- **Presentation:** Three small rack parcels are consumed one at a time at their actual world origins. Every indexed recipient reacts immediately; only the completed total saves `tiny-planet-courier:tour:best:v1`. Final total/splits/best and **Restart tour** leave driving active. Pause/blur freeze the journey and reactions; restart/home clear journey, cargo and reactions.
+- **Test additions:** Independent cargo/registry unit coverage; DEV Tour snapshots and complete route fixtures; real-input wide/short full-tour and closing-road browser cases; earned recovery, wrong-stop/exactly-once, pause/blur, early restart, records and 320px reduced-motion/touch/focus fixtures; production Tour-query rejection.
+- **Collaboration:** Follow [AGENTS.md](../AGENTS.md), the canonical policy, and the [approved Tour plan](tour-plan.md). The primary authored `AGENTS.md` and its `CLAUDE.md` discovery pointer at the owner's request. All application/test implementation came from GPT-6 subagents configured with medium effort; the coordinator independently reviewed and verified integration.
+- **Earlier phase-C worker validation:** `npx vitest run src/vehicle-cargo.test.ts src/delivery-prototypes.test.ts` passed **25 tests in 2 files** before integrated verification. These tests did not import the concurrently edited World implementation.
+
+### Integrated verification — coordinator results
+
+The following results were supplied by the primary coordinator after both workers completed, **not run by the documentation-only finish worker**:
+
+| Command | Coordinator result |
+| --- | --- |
+| `npm test` | **168 unit tests passed in 17 files.** |
+| `npm run build` | TypeScript and production build passed. Only the existing non-blocking bundle-size warning remained; an earlier build also emitted a one-off plugin-timing diagnostic, not a failure. |
+| `npm run test:browser -- tests/browser/tour.spec.ts --output=artifacts/tour-review/browser` | **All 4 focused Tour cases passed.** |
+| `npm run test:browser -- --output=artifacts/tour-review/full-browser` | **All 20 development browser cases passed**, covering the original game, all single slices, both complete real-input Tours and their closing road, checkpoints, pause/early restart, and 320px touch/focus/recipient visibility. |
+| `npm run test:preview -- --output=artifacts/tour-review/production` | **All 6 cases passed**, including Tour and unknown selectors remaining the original game with no test bridge. |
+
+The coordinator also reviewed desktop handoff/end screenshots for all three locales and the 320px final UI. An additional independent automated smoke check on `/?prototype=tour` used **only visible HUD text/arrow and physical keyboard events**, with **no test bridge or route fixtures**. It completed all three deliveries with final HUD **03/03** at approximately **00:26** and no browser errors. This is automated keyboard verification, **not an owner/human playtest or a claim that the Tour is fun**.
+
+Run development-browser and production-preview suites sequentially for future checks, as required by [AGENTS.md](../AGENTS.md). Owner playtesting should now assess whether the connected journey preserves each route's distinct rhythm and whether transfers, guidance and handoffs feel clear.
+
+The Tour branch is local/unpublished at this handoff. The cross-computer commands and historical results below describe the **previous accepted slice checkpoint**, not a published Tour release. The earlier pending Tour design decision is superseded by the approved Tour plan; owner acceptance of the connected journey and production promotion remain separate gates.
+
+### Historical UI-readability follow-up
+
+The owner requested readable welcome copy and a navigation arrow outside the small side panel. GPT-6 subagents configured with **medium effort** implemented the follow-up; the primary independently reviewed and verified it. The results below were supplied by the primary, **not run by the documentation-only finish worker**. Prior Tour and accepted-slice results remain historical records.
+
+- **Welcome:** Body text is **18px desktop / 16px mobile**; the CTA is **17px and 54px tall**, with useful **12px** support text. Start remains visible in standard portrait and **844×390** landscape. Extreme heights support real wheel/touch welcome scrolling, and the short-phone planet uses the available space instead of staying tiny.
+- **Navigation:** An independent, opaque **top-center HUD** replaces side-panel navigation. The arrow is actually centered, with a **48px desktop / 40px portrait-mobile / 44px short-landscape SVG**. Next-stop text is **16–18px**, distance **24–28px**, and hints **14px**. Existing IDs and canonical navigation are reused, with shortest-angle presentation wrapping, reduced-motion support, stale-state hiding and avoidance of cached target labels.
+- **Landscape repair:** The primary found that stacked toast/navigation panels obscured the van; a subagent using the same model/effort repaired it. At **844×390**, navigation spans **y68–162**, while the toast sits lower-left above touch controls, leaving the actual projected van visible. Gameplay/chase camera, routes, physics, timers and recovery semantics were unchanged; only welcome framing was adapted.
+
+**Coordinator verification:**
+
+- **172 unit tests** passed; TypeScript and the production build passed.
+- **All 20 existing gameplay browser cases** passed in the full run. An initial new matrix case grouped five scenes under one **120-second** budget and timed out during the fifth `page.goto` after earlier loads consumed the budget; **no layout assertion failed**. The isolated original case passed **3/3**. A subagent split the matrix into independent fresh-context **mode × viewport** tests without dropping assertions or increasing the timeout.
+- **All 39 resulting UI-readability browser cases** then passed. The coordinator verified **20 gameplay cases plus 39 UI cases across separate sequential commands**, not one 59-test full command.
+- **All 6 production-preview isolation cases** passed afterward.
+- The primary also completed a Tour using only **rendered arrow orientation, visible HUD text and physical keyboard events**, with **no bridge or route fixtures**, at roughly **00:39** and with no browser errors. This is automated verification, **not owner playtest approval**.
+
+**Historical handoff:** Continue locally at http://127.0.0.1:5173/?prototype=tour on `prototype/three-stop-tour`. No new commits, pushes, merges or deployments; the public site remains untouched. Await the owner's impression of the new legibility; connected-journey acceptance and release authorization remain separate pending gates.
+
+### Historical centered-HUD glass follow-up
+
+The owner requested that the centered HUD feel less blocking. This CSS-only refinement supersedes the opaque backing described above: normal backing is `rgba(16, 40, 47, .70)` with `blur(5px) saturate(1.08)`, a lighter border/shadow, and full-opacity text/arrow with sufficient local contrast. Unsupported filtering and reduced-transparency preference use a `.96` backing alpha without blur. HUD location/sizing, navigation and gameplay are unchanged.
+
+- **Coordinator verification, not run by this documentation-only worker:** **172 unit tests**, the build, **9 focused glass/layout/real-Bay-launch browser tests**, and **6 production-isolation tests** passed. The coordinator inspected real rendered desktop, mobile and short-landscape screenshots and measured the actual normal glass style; tested white-background text contrast was at least **4.69:1**.
+- **Limits:** Fallback was tested by intercepting the stylesheet support gate, not on an actual old browser. No Safari/WebKit execution or full **42-case UI suite** rerun is claimed for this cosmetic follow-up.
+- **Handoff:** Still local at http://127.0.0.1:5173/?prototype=tour on `prototype/three-stop-tour`, awaiting the owner's visual preference. No new commits, pushes, merges or deployments; the public site remains untouched, and connected-journey acceptance and release authorization remain pending.
+
+- **Transparency follow-up:** At the owner's request for slightly more transparency, normal alpha is now `.63` instead of `.70`; opaque warm-white `#fffdf5` text retains **≥4.5:1** contrast against a white background. `blur(5px) saturate(1.08)` and the `.96` accessibility/fallback backing remain unchanged. The coordinator independently verified the build, **all 3 focused glass tests**, and actual runtime `rgba(16, 40, 47, 0.63)` / `opacity: 1`. This documentation-only worker ran no tests; no new full-suite run is claimed. Earlier verification remains historical; no commits, pushes or deployments.
+
+## Previous accepted slice checkpoint
 
 - **Branch:** `prototype/bay-leap`
 - **Status:** Bay Leap and Stargaze Station received positive owner playtest feedback on 2026-09-07. Windmill Garden was verified and received positive owner feedback on its distinct route rhythms on 2026-09-08.
@@ -9,7 +152,9 @@
 
 This branch checkpoints Bay Leap, Station and Garden for cross-computer continuation. The owner requested Station's commit/push before starting Garden, then explicitly requested the Garden commit/push after positively playtesting its route rhythms. **These checkpoints do not authorize merging into `main` or replacing the live GitHub Pages game.**
 
-## Continue on another computer
+## Historical cross-computer setup — accepted slices only
+
+For the current connected Tour checkpoint, use the setup at the top of this document. The following commands preserve the earlier slice-only handoff.
 
 Use Node.js 24, then:
 
@@ -46,9 +191,9 @@ Spawn ----+               Bay                +---- Sunrise Bakery
                   Shortcut: faster, skillful
 ```
 
-### Boundaries to preserve
+### Boundaries preserved from the accepted slice checkpoint
 
-- One parcel per selected slice: **Sunrise Bakery**, **Stargaze Station** or **Windmill Garden**. No larger mission system or connected three-stop prototype yet.
+- One parcel per selected independent slice: **Sunrise Bakery**, **Stargaze Station** or **Windmill Garden**. The separately approved DEV Tour connects them without replacing these entries or adding a larger mission system.
 - Keep the English UI and mint, cream, and coral toy-world aesthetic.
 - No time limit, parcel loss, long retry sequence, or blocking delivery cutscene.
 - No new driving buttons: WASD/arrows, Space, R, and the existing touch controls.
@@ -110,7 +255,7 @@ After the Station checkpoint was committed and pushed as requested, the owner au
 - [x] Independent records, completed-but-drivable sessions, immediate R recovery, early restart, home/start, optional sound, reduced-motion feedback and 320px touch/results use the existing contracts.
 - [x] Desktop home, mid-route, delivered and small-phone screenshots inspected. Real-controller and browser route checks pass without collisions, jumps or recoveries.
 
-Garden remains a short, independently selected delivery. Do not retune Bay or Station to accommodate it, and do not connect all three locales into a tour without an explicit map/session design decision.
+Garden remains a short, independently selected delivery. Do not retune Bay or Station to accommodate it. The separate connected journey now follows the explicit map/session decision in [tour-plan.md](tour-plan.md); that approval does not replace the accepted independent slices.
 
 ## Where to work
 
@@ -134,9 +279,9 @@ Garden remains a short, independently selected delivery. Do not retune Bay or St
 
 Keep geometry and physics in agreement. If changing ramp length/rise, shore positions, or landing dimensions, update the shared level data and recheck actual flight ranges. Do not create a visual-only ramp or a hidden support surface across the water.
 
-## Validation at handoff
+## Historical validation — accepted slice checkpoint
 
-Last verified on 2026-09-08 with Node.js 24 and locally installed Google Chrome:
+The accepted slice handoff recorded verification on 2026-09-08 with Node.js 24 and locally installed Google Chrome. These historical counts are superseded by the integrated Tour coordinator results above:
 
 - **131 unit tests passed** (13 files), preserving the Station checkpoint's 114-test baseline.
 - **16 development browser tests passed**, preserving the original and Station checks and adding three Garden flows.
@@ -162,13 +307,13 @@ Browser tests default to a locally installed **Microsoft Edge**. `PLAYWRIGHT_CHA
 
 Generated screenshots and test diagnostics go into ignored `artifacts/` and `test-results/` directories. Vite reports a non-blocking bundle-size warning; do not turn this playtest into an unrelated bundling rewrite unless measured loading problems justify it.
 
-## Next decision: whether to connect the slices
+## Next decision: owner feedback on the connected journey
 
 ### 1. Preserve the accepted baseline
 
 On 2026-09-07, after being asked about route distinction and whether the inner lane rewards better driving, the owner confirmed they had played Station and called it excellent ("特别棒"). The Station playtest gate is satisfied; do not repeat its general acceptance checklist or retune the accepted handling without a concrete reason.
 
-The owner then explicitly requested the Station commit/push and the Garden implementation. On 2026-09-08, after playing Garden, they confirmed that different routes have different rhythms ("不同的路线不同的节奏") and that the experience feels good. Garden's route-rhythm/distinction playtest gate is satisfied. This does not claim manual coverage of every device or edge case, and is not approval to connect the slices, merge, or deploy. The owner subsequently requested the Garden commit/push.
+The owner then explicitly requested the Station commit/push and the Garden implementation. On 2026-09-08, after playing Garden, they confirmed that different routes have different rhythms ("不同的路线不同的节奏") and that the experience feels good. Garden's route-rhythm/distinction playtest gate is satisfied. This does not claim manual coverage of every device or edge case, and that slice feedback did not itself approve connecting the slices, merging, or deploying. The owner subsequently requested the Garden commit/push, then separately approved Tour development as recorded in [tour-plan.md](tour-plan.md). Connected-Tour owner feedback remains pending.
 
 ### 2. Preserve three distinct route identities
 
@@ -176,7 +321,7 @@ The owner then explicitly requested the Station commit/push and the Garden imple
 - **Stargaze Station:** braking and line choice through tighter bends.
 - **Windmill Garden:** steady, linked steering through flowing S-bends.
 
-The same accepted driving controller supports these different rhythms. Future work should preserve that contrast; revisit the general playtest checklist only when a concrete change warrants it. The owner requested a Garden checkpoint; designing a connected journey remains a separate next decision.
+The same accepted driving controller supports these different rhythms. Future work should preserve that contrast; revisit the general playtest checklist only when a concrete change warrants it. The owner requested a Garden checkpoint and subsequently approved connected-Tour development. The next playtest decision is whether that connected journey preserves the accepted contrast, not whether to implement it.
 
 ### 3. Tune the weakest link, not the feature count
 
@@ -194,6 +339,8 @@ Make a small change, replay all three prototypes, and preserve the regression te
 - [x] Implement Garden's flowing S-path versus forgiving perimeter route without new driving systems.
 - [x] Obtain hands-on feedback on Garden before expanding again.
 - [x] Obtain the owner's explicit request to commit/push the accepted Garden checkpoint.
-- [ ] Decide explicitly whether to connect the slices into a tour; the current locales are independent.
+- [x] Approve the connected Tour map/session design separately from the accepted slices; see [tour-plan.md](tour-plan.md).
+- [x] Complete DEV-only Tour implementation and independent coordinator verification for local playtesting.
+- [ ] Obtain owner feedback on the connected journey; automated checks do not satisfy this gate.
 - [ ] Decide explicitly how prototypes become the production game, and promote/remove the DEV-only gate deliberately.
 - [ ] Merge/deploy to `main` only when the owner separately approves that release step.

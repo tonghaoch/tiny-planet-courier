@@ -1,6 +1,6 @@
 import { Vector3 } from 'three';
-import { AuthoredLevel, segmentDistance, type AuthoredLevelDefinition, type LevelPoint } from './authored-level';
-import { surfaceDistance } from './math';
+import { AuthoredLevel, type AuthoredLevelDefinition, type LevelPoint } from './authored-level';
+import { branchNavigation, type BranchNavigation, type NavigationContext } from './route-guidance';
 
 export type RoadRoute = 'outer' | 'inner';
 
@@ -21,23 +21,9 @@ export class RoadLevel extends AuthoredLevel {
     this.innerRoute = this.route(course.innerRouteCenterline);
   }
 
-  navigation(normal: Vector3, previous: RoadRoute | null): { route: RoadRoute | null; target: Vector3 } {
-    const local = this.toLocal(normal);
-    if (surfaceDistance(normal, this.destination.normal) < 2.3) return { route: previous, target: this.destination.normal };
-    const distanceTo = (path: readonly LevelPoint[]) => Math.min(...path.slice(1).map((p, i) => segmentDistance(local, path[i], p)));
-    const outerDistance = distanceTo(this.course.outerRouteCenterline), innerDistance = distanceTo(this.course.innerRouteCenterline);
-    let choice = previous;
-    if (local.x < this.course.fork.x - 0.4) choice = null;
-    else if (outerDistance + 0.35 < innerDistance) choice = 'outer';
-    else if (innerDistance + 0.35 < outerDistance) choice = 'inner';
-    const route = choice === 'outer' ? this.outerRoute : this.innerRoute;
-    let closest = 0, best = Infinity;
-    route.forEach((p, i) => {
-      const distance = surfaceDistance(normal, p);
-      if (distance < best) { closest = i; best = distance; }
-    });
-    let ahead = Math.min(route.length - 1, closest + 1);
-    while (ahead < route.length - 1 && surfaceDistance(normal, route[ahead]) < 1.8) ahead++;
-    return { route: choice, target: route[ahead] };
+  navigation(normal: Vector3, previous: RoadRoute | null, context: NavigationContext = {}): BranchNavigation<RoadRoute> {
+    return branchNavigation(normal, previous, context,
+      { inner: this.innerRoute, outer: this.outerRoute }, ['inner', 'outer'],
+      this.toNormal(this.course.fork.x, this.course.fork.y), this.spawnPose.normal, this.destination.normal);
   }
 }

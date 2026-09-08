@@ -1,4 +1,6 @@
-export type PrototypeId = 'bay' | 'station' | 'garden';
+import { TOUR_RECORD_KEY } from './tour-session';
+
+export type PrototypeId = 'bay' | 'station' | 'garden' | 'tour';
 
 /** Authored playtest identity and copy only; scene construction stays outside the UI. */
 export interface PrototypeDefinition {
@@ -131,10 +133,37 @@ export const PROTOTYPES: Readonly<Record<PrototypeId, PrototypeDefinition>> = {
       delivered: 'Delivered to Windmill Garden. Thank you!',
     },
   },
+  tour: {
+    id: 'tour',
+    bestScoreKey: TOUR_RECORD_KEY,
+    name: 'Three-stop Tour',
+    destinationName: 'Sunrise Bakery',
+    parcelDescription: 'Three parcels for three neighbors',
+    home: {
+      eyebrow: 'THREE-STOP TOUR · A LOCAL PLAYTEST',
+      title: 'Three stops.<br>One big <span class="warm-word">day.</span>',
+      description: 'Bakery, station, garden. One connected journey.<br>Pick your paths and follow the roads between stops.',
+      ticketHeading: 'ONE PLANET · THREE STOPS',
+      place: 'Mint Planet', code: 'TOUR-01', parcelLabel: 'little parcels',
+      ticketDetail: 'Bay → Station → Garden',
+    },
+    hints: {
+      start: 'Bakery first. Take the coast road—or boost across the bay.',
+      recovery: 'Back at your last reached safe point. Your deliveries are safe.',
+      choice: 'Choose a local path, then follow the connecting road.',
+      outer: 'Take the wide way round.', inner: 'Take the shorter local path.',
+      nearDestination: 'Brake and park in the glow.',
+    },
+    result: {
+      heading: 'Three smiles, delivered.',
+      description: 'Keep exploring. The road returns to the bay.',
+      bestLabel: 'Tour best', newRecord: 'A new tour best!', delivered: 'All three parcels delivered.',
+    },
+  },
 };
 
 export function selectPrototype(search: string, development: boolean): PrototypeDefinition | null {
   if (!development) return null;
   const id = new URLSearchParams(search).get('prototype');
-  return id === 'bay' || id === 'station' || id === 'garden' ? PROTOTYPES[id] : null;
+  return id === 'bay' || id === 'station' || id === 'garden' || id === 'tour' ? PROTOTYPES[id] : null;
 }

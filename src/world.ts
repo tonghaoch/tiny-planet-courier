@@ -7,7 +7,9 @@ import { STATION_LEVEL, StationLevel } from './station-level';
 import { StationDeliveryReaction } from './station-reaction';
 import { GARDEN_LEVEL, GardenLevel } from './garden-level';
 import { GardenDeliveryReaction } from './garden-reaction';
-import type { BayEnvironment } from './bay-types';
+import type { BayEnvironment, SurfacePose } from './bay-types';
+import { TourLayout } from './tour-layout';
+import { createTourConnectorGeometry } from './tour-world-geometry';
 
 const PALETTE = { ocean: 0x387f8b, shallow: 0x70baa9, sand: 0xe4cf9f, grass: 0x88b99b, leaf: 0x568a76, darkLeaf: 0x326f62, road: 0xe8d9b8, orange: 0xf49869, cream: 0xffebcb };
 const materials = new Map<string, THREE.MeshStandardMaterial>();
@@ -59,7 +61,7 @@ interface BakeryReaction {
   started: boolean;
 }
 
-interface DeliveryReactionSnapshot {
+export interface DeliveryReactionSnapshot {
   destination?: string;
   active: boolean;
   progress: number;
@@ -78,6 +80,8 @@ export class PlanetWorld {
   readonly bayLevel: BayLevel | null;
   readonly stationLevel: StationLevel | null;
   readonly gardenLevel: GardenLevel | null;
+  readonly tourLayout: TourLayout | null;
+  /** A single-locale alias only; Tour has no privileged district. */
   readonly authoredLevel: AuthoredLevel | null;
   readonly drivingEnvironment: BayEnvironment | null;
   readonly bayEnvironment: BayEnvironment | null;
@@ -103,13 +107,14 @@ export class PlanetWorld {
   private stationReaction: StationDeliveryReaction | null = null;
   private gardenReaction: GardenDeliveryReaction | null = null;
 
-  constructor(prototype: boolean | 'bay' | 'station' | 'garden' = false, private readonly reducedMotion = false) {
-    this.bayLevel = prototype === true || prototype === 'bay' ? new BayLevel() : null;
-    this.stationLevel = prototype === 'station' ? new StationLevel() : null;
-    this.gardenLevel = prototype === 'garden' ? new GardenLevel() : null;
-    this.authoredLevel = this.bayLevel ?? this.stationLevel ?? this.gardenLevel;
+  constructor(prototype: boolean | 'bay' | 'station' | 'garden' | 'tour' = false, private readonly reducedMotion = false) {
+    this.tourLayout = prototype === 'tour' ? new TourLayout() : null;
+    this.bayLevel = this.tourLayout?.stops[0].level ?? (prototype === true || prototype === 'bay' ? new BayLevel() : null);
+    this.stationLevel = this.tourLayout?.stops[1].level ?? (prototype === 'station' ? new StationLevel() : null);
+    this.gardenLevel = this.tourLayout?.stops[2].level ?? (prototype === 'garden' ? new GardenLevel() : null);
+    this.authoredLevel = this.tourLayout ? null : this.bayLevel ?? this.stationLevel ?? this.gardenLevel;
     const level = this.authoredLevel;
-    this.drivingEnvironment = level ? {
+    this.drivingEnvironment = this.tourLayout ? this.tourLayout.createEnvironment(this.colliders) : level ? {
       spawnPose: level.spawnPose,
       recoveryPose: level.recoveryPose,
       colliders: this.colliders,
@@ -117,9 +122,11 @@ export class PlanetWorld {
       crossRampLip: (previous, next) => level.crossRampLip(previous, next),
     } : null;
     this.bayEnvironment = this.drivingEnvironment;
-    if (level) this.destinations = [level.destination];
+    if (this.tourLayout) this.destinations = this.tourLayout.destinations;
+    else if (level) this.destinations = [level.destination];
     this.buildPlanet();
     this.buildRoads();
+    this.buildTourConnectors();
     this.buildSettlements();
     if (this.bayLevel) this.buildBayLocale();
     if (this.stationLevel) this.buildStationLocale();
@@ -128,6 +135,9 @@ export class PlanetWorld {
     this.buildClouds();
     this.buildTargets();
     this.buildAtmosphere();
+    // Modest omnidirectional fill complements the existing sun/hemisphere rig on
+    // the far side of the planet. No shared material or standalone lighting changes.
+    if (this.tourLayout) this.root.add(new THREE.AmbientLight(0xe0f0ef, 0.6));
     this.batchStaticScenery();
     this.setActiveDestination(-1);
   }
@@ -149,7 +159,14 @@ export class PlanetWorld {
       for (let parent: THREE.Object3D | null = object; parent; parent = parent.parent) {
         if (animated.has(parent)) return;
       }
-      const key = `${object.material.uuid}:${object.castShadow}:${object.receiveShadow}`;
+      if (object.userData.keepSurfaceGeometry) return;
+      // Projected overlays have position/normal (and sometimes color), while
+      // primitive meshes also have UVs. Never ask Three to merge unlike schemas.
+      const attributes = Object.keys(object.geometry.attributes).sort().map(name => {
+        const attribute = object.geometry.getAttribute(name);
+        return `${name}/${attribute.itemSize}/${attribute.normalized}`;
+      }).join(',');
+      const key = `${object.material.uuid}:${object.castShadow}:${object.receiveShadow}:${attributes}`;
       const batch = batches.get(key) ?? [];
       batch.push(object as THREE.Mesh<THREE.BufferGeometry, THREE.MeshStandardMaterial>);
       batches.set(key, batch);
@@ -172,7 +189,32 @@ export class PlanetWorld {
     }
   }
 
-  heightAt(normal: THREE.Vector3): number { return this.authoredLevel ? this.authoredLevel.sampleSurface(normal).radius : R + 0.105; }
+  heightAt(normal: THREE.Vector3): number { return this.drivingEnvironment?.sampleSurface(normal).radius ?? R + 0.105; }
+
+  /** The session owns checkpoint policy; the world only takes a defensive copy. */
+  setTourRecoveryPose(pose: SurfacePose): void {
+    if (!this.tourLayout || !this.drivingEnvironment) return;
+    this.drivingEnvironment.recoveryPose = { normal: pose.normal.clone(), forward: pose.forward.clone() };
+  }
+
+  private destinationLevel(index: number): AuthoredLevel | null {
+    if (!Number.isInteger(index) || index < 0 || index >= this.destinations.length) return null;
+    return this.tourLayout?.stops[index]?.level ?? this.authoredLevel;
+  }
+
+  private sceneryClearance(normal: THREE.Vector3, margin?: number): boolean {
+    return this.tourLayout?.isInSceneryClearance(normal, margin)
+      ?? this.authoredLevel?.isInSceneryClearance(normal, margin) ?? false;
+  }
+
+  private buildTourConnectors() {
+    for (const connector of this.tourLayout?.connectors ?? []) {
+      const road = mesh(createTourConnectorGeometry(connector), material(PALETTE.road), this.root, 0, 0, 0, false);
+      road.name = `tour-connector-${connector.from}-${connector.to}`;
+      road.userData.keepSurfaceGeometry = true;
+      road.receiveShadow = true;
+    }
+  }
 
   private terrain(n: THREE.Vector3): number {
     return Math.sin(n.x * 4.8 + n.z * 2.7) * 0.44 + Math.cos(n.y * 5.2 - n.x * 2) * 0.38 + Math.sin(n.z * 8 + n.y * 3) * 0.17;
@@ -199,6 +241,7 @@ export class PlanetWorld {
     }
     geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
     const planet = mesh(geometry, material(0xffffff, { vertexColors: true }), this.root, 0, 0, 0, false);
+    planet.name = 'base-planet';
     planet.receiveShadow = true;
   }
 
@@ -215,7 +258,9 @@ export class PlanetWorld {
         const rightPoint = n.clone().multiplyScalar(R + 0.075).addScaledVector(right, 0.52).normalize().multiplyScalar(R + 0.085);
         vertices.push(...leftPoint.toArray(), ...rightPoint.toArray());
         const next = normals[Math.min(i + 1, normals.length - 1)];
-        const clipped = this.authoredLevel && [n, next, n.clone().add(next).normalize()].some(p => this.authoredLevel!.isInSceneryClearance(p));
+        // The margin covers the whole old road plus its between-sample chord,
+        // rather than testing only its centre against the authored boundary.
+        const clipped = [n, next, n.clone().add(next).normalize()].some(p => this.sceneryClearance(p));
         if (i < normals.length - 1 && !clipped) {
           const k = i * 2;
           indices.push(k, k + 1, k + 2, k + 1, k + 3, k + 2);
@@ -243,7 +288,7 @@ export class PlanetWorld {
   }
 
   private house(n: THREE.Vector3, color: number, scale = 1, style = 0) {
-    if (this.authoredLevel?.isInSceneryClearance(n, Math.max(this.authoredLevel.definition.sceneryClearance, scale))) return;
+    if (this.sceneryClearance(n, Math.max(this.authoredLevel?.definition.sceneryClearance ?? 1.5, scale))) return;
     const group = align(n);
     group.rotateY(this.random() * Math.PI * 2);
     const wall = material(color);
@@ -274,7 +319,7 @@ export class PlanetWorld {
   }
 
   private buildSettlements() {
-    this.house(spherical(35, 28), 0xf1c695, 1.45, 0);
+    if (!this.tourLayout) this.house(spherical(35, 28), 0xf1c695, 1.45, 0);
     this.house(spherical(24, 34), 0xe7b3a7, 1.0, 1);
     this.house(spherical(37, 17), 0xc6c5a3, 0.85, 2);
     this.house(spherical(22, 12), 0xe7d5b5, 1.15, 3);
@@ -287,8 +332,9 @@ export class PlanetWorld {
     this.house(spherical(-43, 95), 0xe5b8ac, 0.95, 2);
     this.house(spherical(53, -62), 0xe7d1a8, 1.0, 0);
 
-    if (!this.authoredLevel?.isInSceneryClearance(spherical(54, -47), 1.7)) {
+    if (!this.tourLayout && !this.sceneryClearance(spherical(54, -47), 1.7)) {
       const windmill = align(spherical(54, -47));
+      windmill.name = 'legacy-windmill';
       mesh(new THREE.CylinderGeometry(0.31, 0.49, 1.9, 8), material(0xeedbbe), windmill, 0, 0.95);
       mesh(new THREE.ConeGeometry(0.54, 0.60, 8), material(0xbb866c), windmill, 0, 2.15);
       const rotor = new THREE.Group();
@@ -308,8 +354,9 @@ export class PlanetWorld {
       this.colliders.push({ normal: spherical(54, -47), radius: 0.6 });
     }
 
-    if (!this.authoredLevel?.isInSceneryClearance(spherical(-4, 92))) {
+    if (!this.tourLayout && !this.sceneryClearance(spherical(-4, 92))) {
       const observatory = align(spherical(-4, 92));
+      observatory.name = 'legacy-observatory';
       mesh(new THREE.CylinderGeometry(0.69, 0.75, 0.86, 16), material(0xeee1cd), observatory, 0, 0.46);
       mesh(new THREE.SphereGeometry(0.72, 16, 10, 0, Math.PI * 2, 0, Math.PI / 2), material(0x8d9bad, { metalness: 0.22 }), observatory, 0, 0.88);
       const telescope = mesh(new THREE.CylinderGeometry(0.13, 0.17, 0.89, 10), material(0x546a7a), observatory, 0.1, 1.34, 0.43);
@@ -318,7 +365,7 @@ export class PlanetWorld {
       this.colliders.push({ normal: spherical(-4, 92), radius: 0.75 });
     }
 
-    if (!this.authoredLevel?.isInSceneryClearance(spherical(-13, -30))) {
+    if (!this.sceneryClearance(spherical(-13, -30))) {
       const lighthouse = align(spherical(-13, -30));
       for (let i = 0; i < 5; i++) mesh(new THREE.CylinderGeometry(0.3 - i * 0.02, 0.32 - i * 0.02, 0.36, 10), material(i % 2 ? 0xdf977d : 0xf8e6c6), lighthouse, 0, 0.18 + i * 0.36);
       mesh(new THREE.CylinderGeometry(0.31, 0.31, 0.35, 10), material(0xffd58b, { emissive: 0xffc36d, emissiveIntensity: 0.6 }), lighthouse, 0, 1.98);
@@ -331,8 +378,7 @@ export class PlanetWorld {
   /** Triangulate in authored coordinates, then split every long chord before projection.
    * Even the low water overlay stays outside the original radius between vertices.
    */
-  private localeOverlay(name: string, polygons: readonly (readonly BayPoint[])[], radiusAt: (p: BayPoint) => number, mat: THREE.MeshStandardMaterial, colorAt?: (p: BayPoint) => THREE.Color) {
-    const level = this.authoredLevel!;
+  private localeOverlay(level: AuthoredLevel, name: string, polygons: readonly (readonly BayPoint[])[], radiusAt: (p: BayPoint) => number, mat: THREE.MeshStandardMaterial, colorAt?: (p: BayPoint) => THREE.Color) {
     const positions: number[] = [], colors: number[] = [];
     const lengthSq = (a: BayPoint, b: BayPoint) => (a.x - b.x) ** 2 + (a.y - b.y) ** 2;
     const append = (a: BayPoint, b: BayPoint, c: BayPoint) => {
@@ -365,12 +411,12 @@ export class PlanetWorld {
     geometry.computeVertexNormals();
     const overlay = mesh(geometry, mat, this.root, 0, 0, 0, false);
     overlay.name = name;
+    overlay.userData.keepSurfaceGeometry = /-(land|water|road)$/.test(name);
     overlay.receiveShadow = true;
     return overlay;
   }
 
-  private localeFrame(p: BayPoint, facing: BayPoint, radius = this.authoredLevel!.definition.surfaceRadii.ground) {
-    const level = this.authoredLevel!;
+  private localeFrame(level: AuthoredLevel, p: BayPoint, facing: BayPoint, radius = level.definition.surfaceRadii.ground) {
     const normal = level.toNormal(p.x, p.y);
     const forward = level.toNormal(facing.x, facing.y);
     forward.addScaledVector(normal, -forward.dot(normal)).normalize();
@@ -381,17 +427,20 @@ export class PlanetWorld {
     return group;
   }
 
-  private localeArrow(p: BayPoint, direction: BayPoint, scale = 1, color = PALETTE.orange) {
+  private localePrefix(level: AuthoredLevel): 'bay' | 'station' | 'garden' {
+    return level instanceof GardenLevel ? 'garden' : level instanceof StationLevel ? 'station' : 'bay';
+  }
+
+  private localeArrow(level: AuthoredLevel, p: BayPoint, direction: BayPoint, scale = 1, color = PALETTE.orange) {
     const d = Math.hypot(direction.x, direction.y);
     const x = direction.x / d, y = direction.y / d;
     const shape = [[-0.40, -0.12], [0.08, -0.12], [0.08, -0.28], [0.46, 0], [0.08, 0.28], [0.08, 0.12], [-0.40, 0.12]];
     const polygon = shape.map(([a, b]) => ({ x: p.x + (x * a - y * b) * scale, y: p.y + (y * a + x * b) * scale }));
-    const level = this.authoredLevel!;
-    this.localeOverlay(`${this.gardenLevel ? 'garden' : this.stationLevel ? 'station' : 'bay'}-route-arrow`, [polygon], q => level.sampleSurface(level.toNormal(q.x, q.y)).radius + 0.012, material(color));
+    this.localeOverlay(level, `${this.localePrefix(level)}-route-arrow`, [polygon], q => level.sampleSurface(level.toNormal(q.x, q.y)).radius + 0.012, material(color));
   }
 
   /** Canvas is optional: arrows, colors and physical signboards still exist in Node. */
-  private localePlaque(parent: THREE.Object3D, label: string, width: number, height: number, y: number, z: number, ink = '#655747') {
+  private localePlaque(level: AuthoredLevel, parent: THREE.Object3D, label: string, width: number, height: number, y: number, z: number, ink = '#655747') {
     mesh(new THREE.BoxGeometry(width + 0.09, height + 0.06, 0.06), material(PALETTE.cream), parent, 0, y, z);
     if (typeof document === 'undefined') return;
     try {
@@ -406,16 +455,16 @@ export class PlanetWorld {
       const texture = new THREE.CanvasTexture(canvas);
       texture.colorSpace = THREE.SRGBColorSpace;
       const text = mesh(new THREE.PlaneGeometry(width, height), new THREE.MeshBasicMaterial({ map: texture }), parent, 0, y, z + 0.032, false);
-      text.name = `${this.gardenLevel ? 'garden' : this.stationLevel ? 'station' : 'bay'}-label-${label.toLowerCase().replaceAll(' ', '-')}`;
+      text.name = `${this.localePrefix(level)}-label-${label.toLowerCase().replaceAll(' ', '-')}`;
     } catch { /* Browsers with disabled canvas can still play; Node never enters here. */ }
   }
 
   private buildBayLocale() {
     const level = this.bayLevel!;
-    const radii = BAY_LEVEL.surfaceRadii;
+    const radii = level.definition.surfaceRadii;
     const sand = new THREE.Color(0xead5a8), mint = new THREE.Color(PALETTE.grass);
     const shallow = new THREE.Color(0x8ad8ce), blue = new THREE.Color(0x479cae);
-    this.localeOverlay('bay-land', [BAY_LEVEL.landPolygon], () => radii.ground,
+    this.localeOverlay(level, 'bay-land', [BAY_LEVEL.landPolygon], () => radii.ground,
       material(0xffffff, { vertexColors: true, roughness: 1 }), p => {
         const coast = Math.min(1, level.distanceToShore(p.x, p.y) / 1.1);
         const color = sand.clone().lerp(mint, coast);
@@ -423,24 +472,24 @@ export class PlanetWorld {
         if (p.x >= landing.minX && p.x <= landing.maxX && p.y >= landing.minY && p.y <= landing.maxY) color.lerp(new THREE.Color(0xb5d7b4), 0.65);
         return color;
       });
-    this.localeOverlay('bay-water', [BAY_LEVEL.waterPolygon], () => radii.water,
+    this.localeOverlay(level, 'bay-water', [BAY_LEVEL.waterPolygon], () => radii.water,
       material(0xffffff, { vertexColors: true, roughness: 0.68, metalness: 0.02 }), p => shallow.clone().lerp(blue, Math.min(1, level.distanceToShore(p.x, p.y) / 0.85)));
     const circle = Array.from({ length: 64 }, (_, i) => ({
       x: BAY_LEVEL.pad.center.x + Math.cos(i / 64 * Math.PI * 2) * BAY_LEVEL.pad.radius,
       y: BAY_LEVEL.pad.center.y + Math.sin(i / 64 * Math.PI * 2) * BAY_LEVEL.pad.radius,
     }));
-    this.localeOverlay('bay-road', [...Object.values(BAY_LEVEL.roads).map(road => road.polygon), circle], () => radii.road, material(PALETTE.road, { roughness: 0.96 }));
+    this.localeOverlay(level, 'bay-road', [...Object.values(BAY_LEVEL.roads).map(road => road.polygon), circle], () => radii.road, material(PALETTE.road, { roughness: 0.96 }));
     this.buildBayRamp();
-    this.localeArrow({ x: -6, y: 1.2 }, { x: 0, y: 1 }, 0.82, 0x4d927c);
-    this.localeArrow({ x: -5.45, y: 0 }, { x: 1, y: 0 }, 0.65);
-    this.localeArrow({ x: -3.65, y: 0 }, { x: 1, y: 0 }, 0.9);
-    this.localeArrow({ x: 5.8, y: 0 }, { x: 1, y: 0 }, 0.85, 0xfff2d5);
+    this.localeArrow(level, { x: -6, y: 1.2 }, { x: 0, y: 1 }, 0.82, 0x4d927c);
+    this.localeArrow(level, { x: -5.45, y: 0 }, { x: 1, y: 0 }, 0.65);
+    this.localeArrow(level, { x: -3.65, y: 0 }, { x: 1, y: 0 }, 0.9);
+    this.localeArrow(level, { x: 5.8, y: 0 }, { x: 1, y: 0 }, 0.85, 0xfff2d5);
 
-    const sign = this.localeFrame({ x: -6.15, y: -1.55 }, { x: -8, y: -1.55 });
+    const sign = this.localeFrame(level, { x: -6.15, y: -1.55 }, { x: -8, y: -1.55 });
     sign.name = 'bay-fork-sign';
     mesh(new THREE.BoxGeometry(0.1, 1.28, 0.1), material(0x866b51), sign, 0, 0.64);
-    this.localePlaque(sign, 'SAFE ROAD', 1.12, 0.24, 1.19, 0.04, '#427760');
-    this.localePlaque(sign, 'BAY JUMP', 1.12, 0.24, 0.83, 0.04, '#ad6245');
+    this.localePlaque(level, sign, 'SAFE ROAD', 1.12, 0.24, 1.19, 0.04, '#427760');
+    this.localePlaque(level, sign, 'BAY JUMP', 1.12, 0.24, 0.83, 0.04, '#ad6245');
     // Non-text directional silhouettes survive the no-canvas fallback.
     for (const [height, color, angle] of [[1.19, 0x589880, Math.PI / 2], [0.83, PALETTE.orange, 0]]) {
       const arrow = mesh(new THREE.ConeGeometry(0.13, 0.25, 3), material(color), sign, 0.73, height, 0.04);
@@ -452,14 +501,14 @@ export class PlanetWorld {
     const waveGeometry = new THREE.BoxGeometry(0.34, 0.008, 0.027);
     for (const p of [{ x: -0.8, y: 1.2 }, { x: 0.9, y: -0.3 }, { x: -0.6, y: -1.6 }, { x: 1.5, y: -3.2 }, { x: -2, y: -4.5 }]) {
       if (!inBayPolygon(p, BAY_LEVEL.waterPolygon)) continue;
-      const wave = this.localeFrame(p, { x: p.x, y: p.y + 1 }, radii.water + 0.009);
+      const wave = this.localeFrame(level, p, { x: p.x, y: p.y + 1 }, radii.water + 0.009);
       mesh(waveGeometry, material(0xc4eee0), wave, 0, 0, 0, false);
       mesh(waveGeometry, material(0xa0ded4), wave, 0.16, 0, 0.15, false).scale.x = 0.6;
       this.root.add(wave);
     }
     // Low landing chevrons sit OUTSIDE the usable 3.3 m-wide landing area.
     for (const x of [3.1, 4.8, 6.5]) for (const y of [-1.84, 1.84]) {
-      this.localeOverlay('bay-landing-marker', [[{ x: x - 0.13, y: y - 0.12 }, { x: x + 0.13, y: y - 0.12 }, { x: x + 0.13, y: y + 0.12 }, { x: x - 0.13, y: y + 0.12 }]], () => radii.ground + 0.012, material(0xfff1cf));
+      this.localeOverlay(level, 'bay-landing-marker', [[{ x: x - 0.13, y: y - 0.12 }, { x: x + 0.13, y: y - 0.12 }, { x: x + 0.13, y: y + 0.12 }, { x: x - 0.13, y: y + 0.12 }]], () => radii.ground + 0.012, material(0xfff1cf));
     }
     this.buildBayBakery();
   }
@@ -499,14 +548,14 @@ export class PlanetWorld {
     sides.setAttribute('position', new THREE.Float32BufferAttribute(sideVertices, 3)); sides.computeVertexNormals();
     mesh(sides, material(0xe88d5e, { side: THREE.DoubleSide }), this.root);
     for (const y of [-ramp.width / 2, ramp.width / 2 - 0.105]) {
-      this.localeOverlay('bay-ramp-edge', [[{ x: ramp.base.x, y }, { x: ramp.lip.x, y }, { x: ramp.lip.x, y: y + 0.105 }, { x: ramp.base.x, y: y + 0.105 }]], p => level.rampRadiusAt(p.x) + 0.008, material(PALETTE.orange));
+      this.localeOverlay(level, 'bay-ramp-edge', [[{ x: ramp.base.x, y }, { x: ramp.lip.x, y }, { x: ramp.lip.x, y: y + 0.105 }, { x: ramp.base.x, y: y + 0.105 }]], p => level.rampRadiusAt(p.x) + 0.008, material(PALETTE.orange));
     }
-    this.localeOverlay('bay-ramp-lip', [[{ x: ramp.lip.x - 0.10, y: -ramp.width / 2 }, { x: ramp.lip.x, y: -ramp.width / 2 }, { x: ramp.lip.x, y: ramp.width / 2 }, { x: ramp.lip.x - 0.10, y: ramp.width / 2 }]], p => level.rampRadiusAt(p.x) + 0.012, material(0xffffff));
+    this.localeOverlay(level, 'bay-ramp-lip', [[{ x: ramp.lip.x - 0.10, y: -ramp.width / 2 }, { x: ramp.lip.x, y: -ramp.width / 2 }, { x: ramp.lip.x, y: ramp.width / 2 }, { x: ramp.lip.x - 0.10, y: ramp.width / 2 }]], p => level.rampRadiusAt(p.x) + 0.012, material(0xffffff));
   }
 
   private buildBayBakery() {
-    const authored = BAY_LEVEL.bakery;
-    const bakery = this.localeFrame(authored.center, authored.facing);
+    const level = this.bayLevel!, authored = BAY_LEVEL.bakery;
+    const bakery = this.localeFrame(level, authored.center, authored.facing);
     bakery.name = 'bay-bakery';
     this.root.add(bakery);
     const wall = material(0xf2ce9c), trim = material(PALETTE.cream), wood = material(0x76604c);
@@ -529,7 +578,7 @@ export class PlanetWorld {
       const stripe = mesh(new THREE.BoxGeometry(0.11, 0.09, 0.63), trim, bakery, i * 0.24, 1.20, 0.95, false);
       stripe.rotation.x = 0.12;
     }
-    this.localePlaque(bakery, 'SUNRISE BAKERY', 1.68, 0.29, 1.58, 0.82);
+    this.localePlaque(level, bakery, 'SUNRISE BAKERY', 1.68, 0.29, 1.58, 0.82);
     for (const x of [-0.8, 0.8]) {
       mesh(new THREE.BoxGeometry(0.32, 0.22, 0.29), material(0xb17f62), bakery, x, 0.13, 0.91);
       for (const dx of [-0.08, 0.08]) {
@@ -582,22 +631,22 @@ export class PlanetWorld {
   }
 
   private buildStationLocale() {
-    const level = this.stationLevel!, data = STATION_LEVEL, radii = data.surfaceRadii;
-    this.localeOverlay('station-land', [data.landPolygon], () => radii.ground, material(PALETTE.grass, { roughness: 1 }));
+    const level = this.stationLevel!, data = STATION_LEVEL, radii = level.definition.surfaceRadii;
+    this.localeOverlay(level, 'station-land', [data.landPolygon], () => radii.ground, material(PALETTE.grass, { roughness: 1 }));
     const pad = Array.from({ length: 64 }, (_, i) => ({
       x: Math.cos(i / 64 * Math.PI * 2) * data.pad.radius,
       y: Math.sin(i / 64 * Math.PI * 2) * data.pad.radius,
     }));
-    this.localeOverlay('station-road', [...Object.values(data.roads).map(road => road.polygon), pad], () => radii.road, material(PALETTE.road, { roughness: 0.96 }));
-    for (const arrow of data.arrows) this.localeArrow(arrow.position, arrow.direction, 0.8, arrow.route === 'outer' ? 0x4d927c : PALETTE.orange);
+    this.localeOverlay(level, 'station-road', [...Object.values(data.roads).map(road => road.polygon), pad], () => radii.road, material(PALETTE.road, { roughness: 0.96 }));
+    for (const arrow of data.arrows) this.localeArrow(level, arrow.position, arrow.direction, 0.8, arrow.route === 'outer' ? 0x4d927c : PALETTE.orange);
     for (const x of [-7.3, -7, -6.7]) {
-      this.localeOverlay('station-brake-marking', [[{ x, y: -0.54 }, { x: x + 0.11, y: -0.54 }, { x: x + 0.11, y: 0.54 }, { x, y: 0.54 }]], () => radii.road + 0.013, material(PALETTE.orange));
+      this.localeOverlay(level, 'station-brake-marking', [[{ x, y: -0.54 }, { x: x + 0.11, y: -0.54 }, { x: x + 0.11, y: 0.54 }, { x, y: 0.54 }]], () => radii.road + 0.013, material(PALETTE.orange));
     }
-    const sign = this.localeFrame({ x: -8.3, y: 1.3 }, { x: -10, y: 1.3 });
+    const sign = this.localeFrame(level, { x: -8.3, y: 1.3 }, { x: -10, y: 1.3 });
     sign.name = 'station-fork-sign';
     mesh(new THREE.BoxGeometry(0.1, 1.35, 0.1), material(0x866b51), sign, 0, 0.675);
-    this.localePlaque(sign, 'OUTER ROAD', 1.3, 0.25, 1.25, 0.04, '#427760');
-    this.localePlaque(sign, 'INNER LANE', 1.3, 0.25, 0.9, 0.04, '#ad6245');
+    this.localePlaque(level, sign, 'OUTER ROAD', 1.3, 0.25, 1.25, 0.04, '#427760');
+    this.localePlaque(level, sign, 'INNER LANE', 1.3, 0.25, 0.9, 0.04, '#ad6245');
     for (const [height, color, angle] of [[1.25, 0x589880, -Math.PI / 2], [0.9, PALETTE.orange, 0]]) {
       const arrow = mesh(new THREE.ConeGeometry(0.13, 0.25, 3), material(color), sign, 0.85, height, 0.04);
       arrow.rotation.z = angle;
@@ -605,7 +654,7 @@ export class PlanetWorld {
     this.root.add(sign);
 
     for (const [index, obstacle] of data.obstacles.entries()) {
-      const group = this.localeFrame(obstacle.center, { x: obstacle.center.x, y: obstacle.center.y + 1 });
+      const group = this.localeFrame(level, obstacle.center, { x: obstacle.center.x, y: obstacle.center.y + 1 });
       group.name = `station-obstacle-${index}`;
       const r = obstacle.radius;
       if (obstacle.kind === 'rock') {
@@ -628,15 +677,15 @@ export class PlanetWorld {
   }
 
   private buildStationObservatory() {
-    const authored = STATION_LEVEL.station;
-    const station = this.localeFrame(authored.center, authored.facing);
+    const level = this.stationLevel!, authored = STATION_LEVEL.station;
+    const station = this.localeFrame(level, authored.center, authored.facing);
     station.name = 'station-observatory';
     this.root.add(station);
     const cream = material(PALETTE.cream), wood = material(0x6b6155), purple = material(0xb1a6c8);
     mesh(new THREE.CylinderGeometry(0.97, 1.06, 0.12, 20), cream, station, 0, 0.06);
     mesh(new THREE.CylinderGeometry(0.9, 0.96, 1.05, 20), material(0xeedccc), station, 0, 0.58);
     mesh(new THREE.BoxGeometry(0.48, 0.7, 0.08), material(0x728b91), station, 0, 0.42, 0.92);
-    this.localePlaque(station, 'STARGAZE STATION', 1.9, 0.28, 1.02, 1.04, '#665879');
+    this.localePlaque(level, station, 'STARGAZE STATION', 1.9, 0.28, 1.02, 1.04, '#665879');
     const animation = new THREE.Group();
     animation.name = 'station-observatory-animation'; station.add(animation);
     const lampMaterial = material(0xffe5ac, { emissive: 0xffc56a, emissiveIntensity: 0.18 }).clone();
@@ -690,7 +739,8 @@ export class PlanetWorld {
   }
 
   private gardenBed(center: BayPoint, radius: number, planted = true) {
-    const group = this.localeFrame(center, { x: center.x, y: center.y + 1 });
+    const level = this.gardenLevel!;
+    const group = this.localeFrame(level, center, { x: center.x, y: center.y + 1 });
     group.name = 'garden-flower-bed';
     mesh(new THREE.CylinderGeometry(radius, radius * 0.96, 0.28, 20), material(0xd8c3a1), group, 0, 0.14);
     mesh(new THREE.CylinderGeometry(radius * 0.91, radius * 0.91, 0.045, 20), material(0x778e68), group, 0, 0.30);
@@ -707,19 +757,19 @@ export class PlanetWorld {
   }
 
   private buildGardenLocale() {
-    const data = GARDEN_LEVEL, radii = data.surfaceRadii;
-    this.localeOverlay('garden-land', [data.landPolygon], () => radii.ground, material(PALETTE.grass, { roughness: 1 }));
+    const level = this.gardenLevel!, data = GARDEN_LEVEL, radii = level.definition.surfaceRadii;
+    this.localeOverlay(level, 'garden-land', [data.landPolygon], () => radii.ground, material(PALETTE.grass, { roughness: 1 }));
     const pad = Array.from({ length: 64 }, (_, i) => ({
       x: Math.cos(i / 64 * Math.PI * 2) * data.pad.radius,
       y: Math.sin(i / 64 * Math.PI * 2) * data.pad.radius,
     }));
-    this.localeOverlay('garden-road', [...Object.values(data.roads).map(road => road.polygon), pad], () => radii.road, material(PALETTE.road, { roughness: 0.96 }));
-    for (const arrow of data.arrows) this.localeArrow(arrow.position, arrow.direction, 0.82, arrow.route === 'outer' ? 0x4d927c : PALETTE.orange);
-    const sign = this.localeFrame({ x: -10.2, y: 1.25 }, { x: -12, y: 1.25 });
+    this.localeOverlay(level, 'garden-road', [...Object.values(data.roads).map(road => road.polygon), pad], () => radii.road, material(PALETTE.road, { roughness: 0.96 }));
+    for (const arrow of data.arrows) this.localeArrow(level, arrow.position, arrow.direction, 0.82, arrow.route === 'outer' ? 0x4d927c : PALETTE.orange);
+    const sign = this.localeFrame(level, { x: -10.2, y: 1.25 }, { x: -12, y: 1.25 });
     sign.name = 'garden-fork-sign';
     mesh(new THREE.BoxGeometry(0.1, 1.35, 0.1), material(0x866b51), sign, 0, 0.675);
-    this.localePlaque(sign, 'GARDEN LOOP', 1.4, 0.25, 1.25, 0.04, '#427760');
-    this.localePlaque(sign, 'FLOWER PATH', 1.4, 0.25, 0.9, 0.04, '#ad6245');
+    this.localePlaque(level, sign, 'GARDEN LOOP', 1.4, 0.25, 1.25, 0.04, '#427760');
+    this.localePlaque(level, sign, 'FLOWER PATH', 1.4, 0.25, 0.9, 0.04, '#ad6245');
     for (const [height, color, angle] of [[1.25, 0x589880, -Math.PI / 2], [0.9, PALETTE.orange, 0]]) {
       const arrow = mesh(new THREE.ConeGeometry(0.13, 0.25, 3), material(color), sign, 0.9, height, 0.04);
       arrow.rotation.z = angle;
@@ -738,8 +788,8 @@ export class PlanetWorld {
   }
 
   private buildGardenWindmill(flowers: THREE.Group) {
-    const authored = GARDEN_LEVEL.windmill;
-    const windmill = this.localeFrame(authored.center, authored.facing);
+    const level = this.gardenLevel!, authored = GARDEN_LEVEL.windmill;
+    const windmill = this.localeFrame(level, authored.center, authored.facing);
     windmill.name = 'garden-windmill'; this.root.add(windmill);
     const cream = material(PALETTE.cream), wood = material(0x7e6954), green = material(0x81a88a);
     mesh(new THREE.CylinderGeometry(0.85, 0.88, 0.13, 12), cream, windmill, 0, 0.065);
@@ -747,7 +797,7 @@ export class PlanetWorld {
     mesh(new THREE.ConeGeometry(0.55, 0.65, 8), material(0xbb866c), windmill, 0, 2.16);
     mesh(new THREE.BoxGeometry(0.3, 0.63, 0.055), green, windmill, 0, 0.39, 0.47);
     mesh(new THREE.BoxGeometry(0.17, 0.23, 0.055), material(0xffe5ac, { emissive: 0xffc56a, emissiveIntensity: 0.2 }), windmill, 0, 1.18, 0.4, false);
-    this.localePlaque(windmill, 'WINDMILL GARDEN', 1.8, 0.27, 0.88, 0.67, '#427760');
+    this.localePlaque(level, windmill, 'WINDMILL GARDEN', 1.8, 0.27, 0.88, 0.67, '#427760');
     const rotor = new THREE.Group(); rotor.name = 'garden-windmill-rotor'; rotor.position.set(0, 1.74, 0.52);
     for (let i = 0; i < 4; i++) {
       const blade = new THREE.Group(); blade.rotation.z = i * Math.PI / 2;
@@ -792,7 +842,7 @@ export class PlanetWorld {
     let rockIndex = 0;
     for (let i = 0; i < 430; i++) {
       const n = spherical(Math.asin(this.random() * 2 - 1) * 180 / Math.PI, this.random() * 360 - 180);
-      if (this.authoredLevel?.isInSceneryClearance(n) || this.terrain(n) < -0.02 || this.nearRoad(n, 1.05) || this.colliders.some(c => surfaceDistance(n, c.normal) < c.radius + 0.9) || this.destinations.some(d => surfaceDistance(n, d.normal) < 1.9)) continue;
+      if (this.sceneryClearance(n) || this.terrain(n) < -0.02 || this.nearRoad(n, 1.05) || this.colliders.some(c => surfaceDistance(n, c.normal) < c.radius + 0.9) || this.destinations.some(d => surfaceDistance(n, d.normal) < 1.9)) continue;
       const group = align(n);
       const s = 0.6 + this.random() * 0.8;
       group.scale.setScalar(s);
@@ -813,7 +863,7 @@ export class PlanetWorld {
     }
     for (let i = 0; i < 300 && rockIndex < 65; i++) {
       const n = spherical(this.random() * 150 - 75, this.random() * 360 - 180);
-      if (this.authoredLevel?.isInSceneryClearance(n) || this.terrain(n) < -0.07 || this.nearRoad(n) || this.destinations.some(d => surfaceDistance(n, d.normal) < 2)) continue;
+      if (this.sceneryClearance(n) || this.terrain(n) < -0.07 || this.nearRoad(n) || this.destinations.some(d => surfaceDistance(n, d.normal) < 2)) continue;
       dummy.position.copy(n).multiplyScalar(R + 0.07);
       dummy.quaternion.setFromUnitVectors(UP, n);
       dummy.scale.set(0.5 + this.random(), 0.5, 0.5 + this.random());
@@ -828,7 +878,7 @@ export class PlanetWorld {
     const waveMat = material(0xa0d4c9, { transparent: true, opacity: 0.38 });
     for (let i = 0; i < 240; i++) {
       const n = spherical(this.random() * 170 - 85, this.random() * 360 - 180);
-      if (this.authoredLevel?.isInSceneryClearance(n) || this.terrain(n) > -0.28 || this.nearRoad(n, 0.6)) continue;
+      if (this.sceneryClearance(n) || this.terrain(n) > -0.28 || this.nearRoad(n, 0.6)) continue;
       const wave = align(n, R + 0.025);
       mesh(waveGeo, waveMat, wave, 0, 0, 0, false);
       mesh(waveGeo, waveMat, wave, 0.12, 0, 0.12, false).scale.x = 0.6;
@@ -837,6 +887,7 @@ export class PlanetWorld {
   }
 
   private buildClouds() {
+    this.clouds.name = 'planet-clouds';
     const cloudGeo = new THREE.IcosahedronGeometry(1, 1);
     const cloudMat = material(0xe9ede0, { transparent: true, opacity: 0.72, depthWrite: false });
     const positions = [[62, 54], [5, -52], [-30, 60], [52, -128], [-47, -100], [10, 155]];
@@ -853,13 +904,21 @@ export class PlanetWorld {
 
   private buildTargets() {
     this.destinations.forEach((destination, i) => {
-      const station = align(destination.normal, this.authoredLevel ? this.authoredLevel.definition.surfaceRadii.road : R + 0.11);
-      if (!this.authoredLevel) {
+      const level = this.destinationLevel(i);
+      const station = this.tourLayout && level
+        ? this.localeFrame(level, level.definition.pad.center, { x: level.definition.pad.center.x + 1, y: level.definition.pad.center.y }, level.definition.surfaceRadii.road)
+        : align(destination.normal, level?.definition.surfaceRadii.road ?? R + 0.11);
+      const padScale = this.tourLayout && level ? level.definition.pad.radius / BAY_LEVEL.pad.radius : 1;
+      station.name = `${level ? this.localePrefix(level) : destination.id}-delivery-target`;
+      if (!level) {
         const base = mesh(new THREE.CylinderGeometry(0.87, 0.87, 0.03, 40), material(0xc5bc9c), station, 0, 0.01, 0, false);
         base.receiveShadow = true;
       }
       const mailbox = new THREE.Group();
-      mailbox.position.set(0.98, 0, 0);
+      mailbox.name = `${level ? this.localePrefix(level) : destination.id}-mailbox`;
+      // Tour pads have eastward through-roads: keep the mailbox beside the pad,
+      // not on its incoming/outgoing centreline. Standalone placement is unchanged.
+      mailbox.position.set(this.tourLayout && level ? level.definition.pad.radius + 0.2 : 0.98, 0, 0);
       mesh(new THREE.BoxGeometry(0.10, 0.49, 0.10), material(0x785f50), mailbox, 0, 0.24);
       mesh(new THREE.BoxGeometry(0.31, 0.29, 0.41), material(destination.color), mailbox, 0, 0.57);
       mesh(new THREE.BoxGeometry(0.21, 0.035, 0.02), material(0x5c655c), mailbox, 0, 0.6, 0.22);
@@ -868,9 +927,9 @@ export class PlanetWorld {
       this.root.add(station);
       const target = new THREE.Group();
       const ringMat = new THREE.MeshBasicMaterial({ color: destination.color, transparent: true, opacity: 0.88, side: THREE.DoubleSide, depthWrite: false });
-      const ring = mesh(new THREE.RingGeometry(0.84, 0.91, 48), ringMat, target, 0, 0.055, 0, false);
+      const ring = mesh(new THREE.RingGeometry(0.84 * padScale, 0.91 * padScale, 48), ringMat, target, 0, 0.055, 0, false);
       ring.rotation.x = -Math.PI / 2;
-      const outer = mesh(new THREE.RingGeometry(1.00, 1.035, 48), ringMat, target, 0, 0.06, 0, false);
+      const outer = mesh(new THREE.RingGeometry(1.00 * padScale, 1.035 * padScale, 48), ringMat, target, 0, 0.06, 0, false);
       outer.rotation.x = -Math.PI / 2;
       const beam = mesh(new THREE.CylinderGeometry(0.12, 0.66, 2.9, 24, 1, true), new THREE.MeshBasicMaterial({ color: destination.color, transparent: true, opacity: 0.075, side: THREE.DoubleSide, depthWrite: false, blending: THREE.AdditiveBlending }), target, 0, 1.48, 0, false);
       beam.renderOrder = 2;
@@ -894,6 +953,7 @@ export class PlanetWorld {
       fragmentShader: `varying vec3 vNormal; varying vec3 vPosition; void main() { float rim = pow(1.0 - abs(dot(normalize(vNormal), normalize(-vPosition))), 3.5); gl_FragColor = vec4(0.38, 0.79, 0.73, rim * 0.16); }`,
       transparent: true, depthWrite: false, side: THREE.FrontSide, blending: THREE.AdditiveBlending,
     }));
+    atmosphere.name = 'planet-atmosphere';
     this.root.add(atmosphere);
   }
 
@@ -913,10 +973,10 @@ export class PlanetWorld {
   }
 
   startDelivery(parcelStart: THREE.Vector3, index = 0): void {
-    if (index !== 0 || !this.authoredLevel) return;
-    if (this.gardenReaction) this.gardenReaction.start(parcelStart);
-    else if (this.stationReaction) this.stationReaction.start(parcelStart);
-    else this.startBayDelivery(parcelStart);
+    const level = this.destinationLevel(index);
+    if (level instanceof GardenLevel) this.gardenReaction?.start(parcelStart);
+    else if (level instanceof StationLevel) this.stationReaction?.start(parcelStart);
+    else if (level instanceof BayLevel) this.startBayDelivery(parcelStart);
   }
 
   resetDelivery(): void {
@@ -925,8 +985,12 @@ export class PlanetWorld {
     this.gardenReaction?.reset();
   }
 
-  getDeliveryReactionSnapshot(): DeliveryReactionSnapshot {
-    return this.gardenReaction?.snapshot() ?? this.stationReaction?.snapshot() ?? this.getBayReactionSnapshot();
+  getDeliveryReactionSnapshot(index = 0): DeliveryReactionSnapshot {
+    const level = this.destinationLevel(index);
+    if (level instanceof GardenLevel) return this.gardenReaction!.snapshot();
+    if (level instanceof StationLevel) return this.stationReaction!.snapshot();
+    if (level instanceof BayLevel || (!this.tourLayout && index === 0)) return this.getBayReactionSnapshot();
+    return { active: false, progress: 0, recipientVisible: false, parcelVisible: false };
   }
 
   startBayDelivery(parcelStart: THREE.Vector3): void {

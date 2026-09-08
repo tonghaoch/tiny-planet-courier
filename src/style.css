@@ -110,7 +110,7 @@ h1 { font-family: Georgia, "Times New Roman", serif; font-weight: 400; font-size
 .mission-card p { font-size: 10px; color: #aabcb0; margin: 0; letter-spacing: .4px; }
 .mission-navigation { display: flex; align-items: center; gap: 12px; margin-top: 21px; padding-top: 17px; border-top: 1px solid var(--line); }
 .direction-disc { display: grid; place-items: center; flex-shrink: 0; width: 35px; height: 35px; background: #bdd8b810; border: 1px solid #a9c5af24; border-radius: 50%; }
-.direction-disc svg { width: 21px; height: 21px; color: var(--coral); transition: transform .1s; }
+.direction-disc svg { width: 21px; height: 21px; color: var(--coral); }
 .mission-navigation > div { display: flex; flex-direction: column; gap: 5px; min-width: 0; }
 .mission-navigation strong { font: 21px Consolas, monospace; }
 .mission-navigation small { font-size: 8px; line-height: 1.45; color: #9bb0a4; }
@@ -326,6 +326,174 @@ h1 { font-family: Georgia, "Times New Roman", serif; font-weight: 400; font-size
 @media (max-width: 360px) {
   .bay-result-times > div:last-child { display: none; }
 }
+/* Tour completion occupies the former objective area, leaving the recipient and pedals open. */
+#app[data-prototype="tour"][data-delivered="true"] :is(.mission-card, .run-time, .delivery-queue) { display: none; }
+.tour-result { position: absolute; z-index: 5; left: 4.3%; top: 130px; width: 265px; padding: 18px; border: 1px solid #d7c5a343; border-radius: 9px; background: #183832eb; backdrop-filter: blur(12px); pointer-events: none; }
+.tour-result h2 { margin: 0 0 12px; font: 22px/1.2 Georgia, serif; }
+.tour-totals { display: flex; justify-content: space-between; gap: 10px; font-size: 10px; color: var(--mint); }
+.tour-totals strong { display: block; margin-top: 4px; color: var(--cream); font: 20px Consolas, monospace; }
+#tour-splits { list-style: none; margin: 12px 0 8px; padding: 8px 0; border-block: 1px solid var(--line); }
+#tour-splits li { display: flex; justify-content: space-between; gap: 8px; font-size: 10px; line-height: 1.9; }
+#tour-splits strong { font-family: Consolas, monospace; font-weight: 400; }
+#tour-record-label { display: block; font-size: 9px; color: var(--coral); }
+.tour-result .start-button { pointer-events: auto; width: 100%; min-height: 44px; margin-top: 10px; font-size: 11px; }
+.tour-result > small { display: block; margin-top: 8px; font-size: 8px; color: var(--muted); }
+@media (max-width: 760px) {
+  .tour-result { top: 90px; left: 5%; right: 5%; width: auto; padding: 10px 12px; display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 5px 10px; }
+  .tour-result h2 { grid-column: 1 / -1; margin: 0; font-size: 17px; }
+  .tour-totals { grid-column: 1 / -1; justify-content: flex-start; gap: 22px; font-size: 9px; }
+  .tour-totals strong { display: inline; font-size: 16px; margin-left: 4px; }
+  #tour-splits { grid-column: 1 / -1; margin: 0; padding: 3px 0; }
+  #tour-splits li { font-size: 9px; line-height: 1.5; }
+  #tour-record-label { grid-column: 1; align-self: center; font-size: 8px; }
+  .tour-result .start-button { grid-column: 2; margin: 0; min-height: 44px; padding: 0 10px; font-size: 9px; letter-spacing: 0; gap: 0; }
+  .tour-result .start-button svg { display: none; }
+  .tour-result > small { grid-column: 1 / -1; margin: 0; font-size: 7px; }
+  #app[data-prototype="tour"] .mission-card { width: 195px; }
+  #app[data-prototype="tour"] .delivery-queue { bottom: 190px; }
+}
+@media (max-height: 630px) and (min-width: 761px) {
+  .tour-result { top: 100px; padding: 12px; }
+}
 @media (prefers-reduced-motion: reduce) {
   *, *:before, *:after { transition-duration: 0.01ms !important; animation-duration: 0.01ms !important; }
+}
+
+/* Readable welcome: flow and scrolling, never miniature type on short screens. */
+.home-view { inset: 116px 0 80px; overflow-y: auto; overflow-x: hidden; pointer-events: auto; display: flex; }
+.hero-copy { position: relative; top: auto; left: auto; width: min(570px, 49%); flex-shrink: 0; margin: auto 0 auto 7%; padding: 24px 0; pointer-events: auto; }
+.home-view h1 { font-size: clamp(44px, 4.45vw, 68px); line-height: 1.15; letter-spacing: -1px; margin: 18px 0; }
+.hero-copy .eyebrow { font-size: 12px; letter-spacing: 1px; color: #b7d7c2; }
+.hero-description { font-size: 18px; line-height: 1.65; letter-spacing: .15px; color: #c7d2ca; margin: 0 0 24px; }
+.welcome-planet-space { display: none; }
+.hero-copy > .start-button { position: static; width: max-content; max-width: 100%; min-height: 54px; font-size: 17px; letter-spacing: .3px; }
+.start-caption { position: static; width: auto; justify-content: flex-start; font-size: 12px; line-height: 1.6; letter-spacing: 0; color: #b4c5b9; margin-top: 12px; flex-wrap: wrap; gap: 7px; }
+.trip-ticket { width: min(440px, 100%); margin-top: 28px; }
+.ticket-top, .ticket-stamp, .ticket-route small, .ticket-count small, .ticket-bottom, .ticket-bottom > span:last-child { font-size: 12px; line-height: 1.5; letter-spacing: .1px; color: #b4c5b9; }
+.ticket-route strong { letter-spacing: .4px; }
+.ticket-bottom { flex-wrap: wrap; gap: 6px 16px; }
+.ticket-route { margin: 16px 0; }
+.footer-controls, .footer-controls kbd { font-size: 12px; }
+.footer-controls { color: #b4c5b9; }
+.brand-type > span { font-size: 10px; letter-spacing: .8px; color: #b4c5b9; }
+.sound-button { min-width: 44px; min-height: 44px; }
+.sound-button span { font-size: 12px; letter-spacing: .2px; }
+.pause-button { min-width: 44px; min-height: 44px; }
+.planet-note { top: 79%; }
+
+/* A symmetric grid centers the arrow itself, independently of text length. */
+.navigation-hud { position: absolute; top: 128px; left: 50%; transform: translateX(-50%); width: min(600px, calc(100% - 32px)); display: grid; grid-template-columns: minmax(0, 1fr) 72px minmax(0, 1fr); align-items: center; gap: 10px 18px; padding: 16px 22px 12px; border: 1px solid rgba(190, 210, 196, .24); border-radius: 12px; background: rgba(16, 40, 47, .96); -webkit-backdrop-filter: none; backdrop-filter: none; box-shadow: 0 4px 16px rgba(7, 21, 28, .16); color: #fffdf5; pointer-events: none; }
+/* Keep the road visible with restrained glass; unsupported browsers retain the solid fallback. */
+@supports ((backdrop-filter: blur(5px)) or (-webkit-backdrop-filter: blur(5px))) {
+  .navigation-hud { background: rgba(16, 40, 47, .63); -webkit-backdrop-filter: blur(5px) saturate(1.08); backdrop-filter: blur(5px) saturate(1.08); }
+}
+@media (prefers-reduced-transparency: reduce) {
+  .navigation-hud { background: rgba(16, 40, 47, .96); -webkit-backdrop-filter: none; backdrop-filter: none; }
+}
+.navigation-destination, .navigation-distance { min-width: 0; }
+.navigation-label { font-size: 12px; color: #fffdf5; letter-spacing: .4px; }
+#mission-name { font-size: 18px; line-height: 1.3; font-weight: 600; letter-spacing: 0; margin: 5px 0 0; overflow-wrap: anywhere; }
+.navigation-distance { display: flex; flex-direction: column; align-items: flex-end; gap: 5px; }
+#mission-distance { font: 28px/1.1 Consolas, monospace; white-space: nowrap; }
+#mission-index { font: 13px/1.3 Consolas, monospace; color: #fffdf5; }
+.direction-disc { width: 72px; height: 72px; background: rgba(41, 75, 77, .80); border: 1px solid rgba(146, 182, 163, .35); }
+.direction-disc svg { width: 48px; height: 48px; color: #ffc59c; transition: none; }
+#direction-cue { color: #fffdf5; font-size: 32px; line-height: 1; font-weight: 600; }
+#mission-hint { grid-column: 1 / -1; margin: 0; text-align: center; font-size: 14px; line-height: 1.45; color: #fffdf5; overflow-wrap: anywhere; }
+.navigation-hud .delivery-meter { grid-column: 1 / -1; width: 100%; height: 4px; margin: 0; background: #47615f; border-radius: 2px; overflow: hidden; }
+.mission-card { top: 130px; padding: 17px 19px; background: #10282ff5; }
+.mission-top { font-size: 12px; letter-spacing: .5px; }
+.mission-card p { margin-top: 10px; font-size: 14px; line-height: 1.5; color: #d5e0d5; letter-spacing: 0; }
+.run-time { padding: 8px 12px; border-radius: 6px; background: #10282ff5; }
+.run-time > span { font-size: 12px; letter-spacing: .2px; color: #bed2c4; }
+.target-marker { font-size: 13px; line-height: 1.35; background: #10282ff5; max-width: calc(100% - 24px); white-space: normal; text-align: center; }
+.marker-icon svg { width: 18px; height: 18px; }
+.toast { top: calc(var(--navigation-bottom, 280px) + 12px); max-width: min(580px, calc(100% - 32px)); font-size: 14px; line-height: 1.45; letter-spacing: 0; background: #203c3e; transform: translate(-50%, 0); }
+.has-error :is(.game-hud, .touch-controls, .target-marker), #app:not([data-mode="playing"]) .toast { display: none; }
+
+@media (max-width: 1200px) {
+  .mission-card { display: none; }
+  .home-view h1 { font-size: 48px; }
+  .hero-copy { width: 49%; margin-left: 5%; }
+  .planet-note, .orbit-label, .edition { display: none; }
+}
+@media (max-height: 780px) and (min-width: 761px) {
+  .home-view { inset: 94px 0 60px; }
+  .hero-copy { padding-block: 18px; }
+  .navigation-hud { top: 104px; }
+}
+@media (max-height: 630px) and (min-width: 761px) {
+  .home-view { inset: 70px 0 0; }
+  .masthead { height: 64px; }
+  .home-view h1 { font-size: 44px; }
+  .hero-copy { margin-block: 0; padding-block: 16px 28px; }
+  .home-footer, .planet-note, .orbit-label, .edition, .trip-ticket, .mission-card { display: none; }
+  .navigation-hud { top: 72px; width: min(520px, calc(100% - 240px)); grid-template-columns: minmax(0, 1fr) 64px minmax(0, 1fr); padding: 10px 16px; gap: 8px 12px; }
+  .direction-disc { width: 64px; height: 64px; }
+  .direction-disc svg { width: 44px; height: 44px; }
+  .run-time { top: 80px; right: 20px; }
+  .toast { top: calc(var(--navigation-bottom, 210px) + 8px); padding: 8px 14px; }
+  .drive-hint { bottom: 14px; }
+}
+@media (max-width: 760px) {
+  .masthead { height: 80px; padding-inline: 16px; }
+  .brand { gap: 7px; }
+  .brand-type strong { letter-spacing: .3px; }
+  .brand-type > span { max-width: 160px; font-size: 10px; letter-spacing: 0; }
+  .sound-button span { display: none; }
+  .header-actions { gap: 4px; }
+  .home-view { inset: 80px 0 0; }
+  .hero-copy { width: calc(100% - 40px); margin: 0 20px; padding: 16px 0 24px; }
+  .home-view h1 { font-size: 36px; line-height: 1.15; margin: 16px 0; letter-spacing: -.5px; }
+  .hero-copy .eyebrow { font-size: 12px; line-height: 1.5; letter-spacing: .3px; }
+  .hero-description { font-size: 16px; line-height: 1.6; letter-spacing: 0; margin: 0; }
+  .hero-copy > .start-button { width: 100%; min-height: 54px; margin-top: 0; font-size: 17px; }
+  .start-caption { justify-content: center; font-size: 12px; margin-top: 12px; }
+  .home-footer, .trip-ticket, .planet-note, .orbit-label { display: none; }
+  .navigation-hud { top: 88px; width: calc(100% - 24px); grid-template-columns: minmax(0, 1fr) 56px minmax(0, 1fr); gap: 10px 8px; padding: 12px; }
+  .direction-disc { width: 56px; height: 56px; }
+  .direction-disc svg { width: 40px; height: 40px; }
+  #mission-name { font-size: 16px; }
+  #mission-distance { font-size: 24px; }
+  #mission-hint { font-size: 14px; }
+  .run-time { top: auto; bottom: 116px; right: 16px; padding: 8px; gap: 5px; }
+  .run-time > span { font-size: 12px; }
+  .run-time > strong { font-size: 20px; }
+  .driving-console { left: 16px; bottom: 116px; max-width: calc(100% - 128px); gap: 10px; padding: 12px 10px; }
+  .boost-readout { width: 66px; }
+  .delivery-queue { display: none; }
+  .toast { padding: 10px 12px; }
+}
+/* The globe owns the flexible space, rather than a fixed gap above an early CTA. */
+@media (max-width: 760px) and (orientation: portrait) {
+  .hero-copy { display: flex; flex-direction: column; align-self: flex-start; min-height: 100%; }
+  .hero-copy > * { flex-shrink: 0; }
+  .welcome-planet-space { display: block; flex: 1 0 144px; }
+}
+@media (max-width: 760px) and (orientation: landscape) {
+  .hero-copy { width: 52%; }
+  .hero-copy > .start-button { margin-top: 24px; }
+}
+/* Keep a compact readout between the two touch clusters on short landscape screens. */
+@media (max-height: 500px) and (min-width: 761px) {
+  .hero-copy { padding-block: 4px; }
+  .home-view h1 { margin: 4px 0 6px; }
+  .hero-description { margin-bottom: 10px; }
+  .start-caption { margin-top: 8px; }
+  /* Keep the driving center open, including the van's airborne silhouette. */
+  .navigation-hud { top: 68px; grid-template-columns: minmax(0, 1fr) 56px minmax(0, 1fr); padding: 6px 14px 8px; gap: 4px 12px; }
+  .navigation-hud .direction-disc { width: 56px; height: 56px; }
+  .navigation-hud #mission-hint { line-height: 1.3; }
+  .navigation-hud .delivery-meter { position: absolute; bottom: 0; left: 14px; width: calc(100% - 28px); height: 3px; }
+  .toast, .toast.visible { top: auto; bottom: max(94px, calc(env(safe-area-inset-bottom) + 94px)); left: 16px; transform: none; width: 260px; max-width: 30%; padding: 8px 10px; gap: 8px; line-height: 1.35; }
+  .toast > span { display: none; }
+  .driving-console { left: 50%; bottom: 20px; transform: translateX(-50%); padding: 12px 14px; gap: 14px; }
+  .speed-readout > strong { font-size: 32px; min-width: 37px; }
+  .speed-readout small { display: none; }
+  .boost-readout { width: 79px; }
+  .console-divider { height: 25px; }
+  .delivery-queue, .drive-hint { display: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  #direction-arrow { transition: none; }
 }
