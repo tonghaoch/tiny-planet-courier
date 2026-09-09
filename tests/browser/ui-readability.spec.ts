@@ -360,12 +360,47 @@ for (const treatment of ['glass', 'fallback', 'reduced'] as const) {
   });
 }
 
+test('bare development root welcomes the released Tour and starts three deliveries', async ({ page }) => {
+  const errors: string[] = [];
+  page.on('pageerror', error => errors.push(error.message));
+  await page.goto('/');
+  await expect(page.locator('#app')).toHaveAttribute('data-ready', 'true');
+  await expect(page.locator('#app')).toHaveAttribute('data-prototype', 'tour');
+  await expect(page.locator('#app')).toHaveAttribute('data-mode', 'home');
+  await expect(page.locator('#error-panel')).toBeHidden();
+  await expect(page.locator('.home-view h1')).toHaveText(/Three stops\.\s*One big day\./);
+  await expect(page.locator('.hero-copy > .eyebrow')).toHaveText('THREE-STOP TOUR');
+  await expect(page.locator('.ticket-stamp')).toHaveText('READY TO GO');
+  await expect(page.locator('#parcel-count')).toHaveText('03');
+  await expect(page.locator('.ticket-count small')).toHaveText('little parcels');
+  await expect(page.locator('#app')).not.toContainText(/playtest/i);
+  expect(await page.evaluate(() => '__planetTest' in window)).toBe(false);
+  await expectNavigationVisibility(page, false);
+  await page.getByRole('button', { name: 'Start delivering', exact: true }).click();
+  await expect(page.locator('#app')).toHaveAttribute('data-mode', 'playing');
+  await expectNavigationVisibility(page, true);
+  await expect(page.locator('#mission-name')).toHaveText('Sunrise Bakery');
+  await expect(page.locator('#mission-index')).toHaveText('01 / 03');
+  await expect(page.locator('#queue-stops .queue-stop')).toHaveCount(3);
+  await expect(page.locator('#stage canvas')).toBeFocused();
+  expect(await page.evaluate(() => '__planetTest' in window)).toBe(false);
+  expect(errors).toEqual([]);
+});
+
 for (const viewport of viewports) {
   for (const mode of modes) {
     test(`readable welcome and centered HUD in ${mode} at ${viewport.width}x${viewport.height}`, async ({ page }) => {
       await page.setViewportSize(viewport);
       await page.goto(`/?test=1&prototype=${mode}`);
       await expect(page.locator('#app')).toHaveAttribute('data-ready', 'true');
+      await expect(page.locator('#app')).toHaveAttribute('data-prototype', mode);
+      if (mode === 'bay' || mode === 'station' || mode === 'garden') {
+        await expect(page.locator('.brand-type')).toContainText('PLAYTEST');
+        await expect(page.locator('.header-center')).toContainText('Local playtest');
+        await expect(page.locator('.ticket-stamp')).toHaveText('PLAYTEST');
+      } else {
+        await expect(page.locator('#app')).not.toContainText(/playtest/i);
+      }
       await expect(page.locator('#error-panel')).toBeHidden();
       await expectNavigationVisibility(page, false);
       expect(await font(page, '.hero-description')).toBeGreaterThanOrEqual(viewport.width <= 760 ? 16 : 18);

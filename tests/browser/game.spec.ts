@@ -26,7 +26,7 @@ async function load(page: Page) {
   const errors: string[] = [];
   page.on('pageerror', error => errors.push(error.message));
   page.on('console', message => { if (message.type() === 'error') errors.push(message.text()); });
-  await page.goto('/?test=1');
+  await page.goto('/?prototype=standard&test=1');
   await expect(page.locator('#app')).toHaveAttribute('data-ready', 'true');
   await expect(page.locator('#error-panel')).toBeHidden();
   await expectEnglish(page);
@@ -117,7 +117,7 @@ test('portrait layout and pointer driving controls', async ({ page }) => {
 test('simultaneous touch steering and acceleration release correctly', async ({ browser }) => {
   const context = await browser.newContext({ viewport: { width: 390, height: 844 }, hasTouch: true });
   const page = await context.newPage();
-  await page.goto('http://127.0.0.1:5173/?test=1');
+  await page.goto('http://127.0.0.1:5173/?prototype=standard&test=1');
   await expect(page.locator('#app')).toHaveAttribute('data-ready', 'true');
   await page.getByRole('button', { name: 'Start delivering' }).tap();
   const start = await snapshot(page);
@@ -147,7 +147,7 @@ test('unsupported graphics produces a readable recovery screen', async ({ page }
       return Reflect.apply(original, this, [type, ...args]);
     } as typeof original;
   });
-  await page.goto('/');
+  await page.goto('/?prototype=standard&test=1');
   await expect(page.getByRole('heading', { name: 'The planet cannot launch yet.' })).toBeVisible();
   await expect(page.locator('#error-message')).toContainText('WebGL 2');
   await expect(page.getByRole('button', { name: 'Reload' })).toBeVisible();

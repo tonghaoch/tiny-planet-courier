@@ -1,16 +1,64 @@
-# Delivery prototypes — iteration plan and handoff
+# Tiny Planet Courier — iteration plan and handoff
 
 <a id="current-checkpoint-and-cross-computer-handoff--2026-09-08"></a>
 
 ## Current checkpoint and cross-computer handoff — 2026-09-09
 
-**Owner-approved checkpoint — 2026-09-09 (Windows local date):** this checkpoint packages the completed, primary-independently-verified left hint/context stack and much more transparent, lightly frosted navigation on **`prototype/three-stop-tour`**. Source changes are only `src/ui.ts` and `src/style.css`; permanent regressions are only in `tests/browser/ui-readability.spec.ts`. No destination-bearing, physics, routes, camera, controls, welcome-layout or delivery/session changes.
+**Authorized official-main release:** the owner has accepted the HUD and personally completed the connected Tour with **no blocking issues**. The former destination-compass/whole-journey owner-playtest gates are closed. The owner explicitly requested the main merge and README screenshot refresh, then confirmed **Tour as the official public default with automatic GitHub Pages deployment**. Do not request that acceptance or authorization again.
 
-**Previous published baseline: `aa853e6` — `Compact navigation HUD and fix mobile welcome layout`.** That checkpoint's positive visual approval and earlier commit/push request followed `56c92fc`; that push is not a pending task. Separately, on 2026-09-09 the owner enthusiastically approved the CURRENT left-hint/left-toast/light-frost version ("very good, great, this version is very good") and explicitly requested **commit + push, then the next step**. Use this branch, **not the older `prototype/bay-leap` checkpoint**; the clone/switch/pull commands below and `git log -1 --oneline` identify the actual received revision.
+The release preparation follows reviewed prototype checkpoint **`59e5263`**, with pre-release main at **`8656d31`**. **`main` is the active cross-computer workflow for the official game**; `prototype/three-stop-tour` is historical development context. The primary owns committing the prepared release, safely fast-forwarding/pushing main, and verifying CI plus the actual public game for the exact pushed SHA. This handoff does not claim those publication steps have already succeeded or assign an uncreated SHA. Identify the received revision with `git log -1 --oneline`; publication confirmation belongs in the primary's release report, not a new owner-approval gate.
 
-**Authorization covers this prototype-branch checkpoint/push only: no main merge, prototype promotion or deployment.** The HUD visual treatment is accepted/frozen as a baseline; final destination-compass and complete Tour gameplay acceptance remain separate pending gates. Before packaging, the primary freshly fetched origin, confirmed HEAD/upstream **0/0** at the previous baseline, and matched source/test SHA256 against the exact independently tested implementation; the existing results below remain valid. The primary owns Git execution and remote-SHA verification; this record claims neither a successful new push nor a new SHA. The previous main/Pages baseline remains `8656d31`; production remains original-only. This documentation-only update records primary-supplied evidence and runs no validation.
+### Official Tour release verification — 2026-09-09
 
-### Current left-context and soft-glass iteration — 2026-09-09
+**Current entry contract:** both the bare development root and production root default to Tour. Production ignores **all** `prototype` overrides and never exposes `window.__planetTest`, including with `test=1`. DEV retains explicit `bay`, `station`, `garden`, `tour` and original-comparison `standard`; missing, empty and unknown DEV selectors fall back to Tour.
+
+Tour now uses **THREE-STOP TOUR**, **Three stops. One big day.**, and **READY TO GO**, with plural parcels in pause copy and no public playtest branding. Standalone local experiments keep their playtest labels. The accepted HUD/style, destination compass, routes, driving, camera, checkpoints, session, records and DEV bridge guards are unchanged.
+
+**Primary-observed results supplied for this release, not suites run by the documentation/capture worker:**
+
+| Check | Observed result |
+| --- | --- |
+| Unit | **228/228 tests passed in 21 files.** |
+| TypeScript / production build | **Passed.** Existing >500kB bundle warning only; **JS 684.30kB / gzip 181.68kB**. |
+| Development browser checks | **All 90 distinct cases passed sequentially:** UI compact **26** + desktop **21** = **47**; navigation **23**; game/Tour **10**; standalone **10**. **Not one all-in-one 90/90 run.** |
+| Production browser checks | **15/15 passed:** 13 default/query cases, actual keyboard lifecycle, and narrow pointer input. |
+| Separate production-preview inspection | **6 desktop/phone URL observations**, Tour identity and no bridge; real keyboard movement/pause/recovery/restart and mobile Start; **no page errors**. Primary record: ignored `artifacts/tour-release/preview-verification.json`. This is not a full production playthrough. |
+
+Reproduce the checks sequentially in fresh processes (installed Edge is the default):
+
+```sh
+npm test
+npm run build
+npm run test:browser -- tests/browser/ui-readability.spec.ts --grep-invert 'navigation glass treatment|1440x900|1920x1080|1024x768'
+npm run test:browser -- tests/browser/ui-readability.spec.ts --grep 'navigation glass treatment|1440x900|1920x1080|1024x768'
+npm run test:browser -- tests/browser/navigation.spec.ts
+npm run test:browser -- tests/browser/game.spec.ts tests/browser/tour.spec.ts
+npm run test:browser -- tests/browser/bay.spec.ts tests/browser/station.spec.ts tests/browser/garden.spec.ts
+npm run test:preview
+```
+
+**Scope/provenance:** application release changes are entry/copy in `src/delivery-prototypes.ts` and `src/ui.ts`. Maintained coverage changes are in `src/delivery-prototypes.test.ts`, `tests/browser/game.spec.ts`, `tests/browser/ui-readability.spec.ts` and `tests/production/prototype.spec.ts`. This documentation assignment changes only README, these three plan/handoff documents and the two selected JPEGs; it runs no unit/browser suites, install/build, Git or deployment commands. The primary separately owns checking source/test hashes after documentation work. No application, test, style, configuration, package or workflow changes are part of this documentation assignment.
+
+### Release screenshot provenance — 2026-09-09
+
+Both older original-game JPEGs were inspected before their owner-requested replacement. The new assets are **real production-preview captures**, not source fixtures:
+
+| Committed asset | Dimensions | File size | Scene |
+| --- | --- | --- | --- |
+| `docs/screenshots/planet-overview.jpg` | **1440×900** | **146,098 bytes** | Settled Tour welcome, release title, connected planet and Start CTA |
+| `docs/screenshots/delivery-run.jpg` | **1440×900** | **107,646 bytes** | Real early driving near the Bay ramp, van/road, centered light-glass compass and left hints |
+
+The capture worker used installed Playwright with **Microsoft Edge (`msedge` 152.0.4191.53)**, a fresh context, device scale **1**, JPEG quality **90**, and the already-running primary-owned preview at **http://127.0.0.1:4173/tiny-planet-courier/** (no query). Observed **HTTP 200**, `data-ready=true`, `data-prototype=tour`, no `__planetTest`, no PLAYTEST copy, and **zero page or console errors**.
+
+Welcome capture waited for fonts and **2200ms** of normal settling. Driving capture clicked **Start delivering**, waited **2400ms** for normal camera settling, then held **W for 1000ms** and released before capture. Visible distance changed **169m → 145m**, with displayed speed **35km/h** after input. No test bridge, source imports, pose teleport, DOM/style injection, HUD hiding or image generation was used. This is an early driving frame, **not proof of a complete Tour**. The worker visually inspected both candidates and copied them byte-for-byte to the existing JPEG paths; final release/staging review belongs to the primary.
+
+The capture script, candidates and observation JSON remain **local-only and ignored** under `artifacts/tour-release/` (`capture-readme.mjs`, `capture-welcome.jpg`, `capture-driving.jpg`, `capture-provenance.json`). They are not maintained scripts or transferred dependencies. Only the two selected JPEGs are documentation assets. No server was started or stopped for capture.
+
+<a id="current-left-context-and-soft-glass-iteration--2026-09-09"></a>
+
+### Historical left-context and soft-glass checkpoint — 2026-09-09
+
+The following implementation and checks describe the accepted HUD at **`59e5263`**, after previous published baseline **`aa853e6` — `Compact navigation HUD and fix mobile welcome layout`**. The owner's enthusiastic visual approval and then-requested prototype checkpoint/push preceded the later full-Tour acceptance and main/Pages authorization above. At this historical stage production was still original-only; its **192/89/6** results are not the new release's **228/90/15** results. The HUD treatment remains frozen in the release.
 
 - The single `#mission-hint` is extracted into a left context stack above the existing parcel card, with no broad hint backing. Desktop aligns left of the centered navigation; at **≤760px**, the hint is **16px from the left**, **≤220px wide**, and **8px below navigation**.
 - Context disappears with navigation on home, pause, no target, completion and error. Marker avoidance and geometry remain cached/event-driven.
@@ -39,27 +87,14 @@
 
 **Initial UI attempt and test-only repair:** **41/46** passed; five **844px** cases waited for `.toast.visible` after newly added lengthy assertions plus the old **1800ms** settle, by which time the unchanged **3600ms** toast had correctly expired. The unchanged settle now runs immediately after Start, followed by an atomic live toast + van sample before expensive layout checks. Final **46/46** passed in **25 + 21** groups. No application duration/timeouts or assertions were weakened. This was test ordering, **not** the historical Windows page-load stalls.
 
-Reproduce sequentially in fresh processes (Edge default); these are the actual split filters, not a claimed single full-suite run:
-
-```sh
-npm test
-npm run build
-npm run test:browser -- tests/browser/ui-readability.spec.ts --grep-invert 'navigation glass treatment|1440x900|1920x1080|1024x768'
-npm run test:browser -- tests/browser/ui-readability.spec.ts --grep 'navigation glass treatment|1440x900|1920x1080|1024x768'
-npm run test:browser -- tests/browser/navigation.spec.ts
-npm run test:browser -- tests/browser/game.spec.ts tests/browser/tour.spec.ts
-npm run test:browser -- tests/browser/bay.spec.ts tests/browser/station.spec.ts tests/browser/garden.spec.ts
-npm run test:preview
-```
-
-Local review artifacts under **`artifacts/soft-glass-hud-review/` are ignored**, not committed screenshots or persistent transferred browser records. The development server remains **http://127.0.0.1:5173/?prototype=tour**; refresh to try the current checkout. Use **`npm run dev`, not preview**. This owner-approved checkpoint packages the verified implementation over previous published baseline `aa853e6`; use the commands below to identify the received revision.
+These historical results used the same sequential split filters recorded in the current release verification above, with then-current counts of **25 + 21** UI cases. Local review artifacts under **`artifacts/soft-glass-hud-review/` are ignored**, not committed screenshots or transferred browser records. At that checkpoint Tour required **http://127.0.0.1:5173/?prototype=tour** in development mode; this former preview restriction is superseded by the official Tour entry contract above.
 
 ### Continue on another computer
 
 Recommend **Node.js 24**. Fresh clone:
 
 ```sh
-git clone --branch prototype/three-stop-tour https://github.com/tonghaoch/tiny-planet-courier.git
+git clone --branch main https://github.com/tonghaoch/tiny-planet-courier.git
 cd tiny-planet-courier
 git log -1 --oneline
 npm ci
@@ -70,10 +105,10 @@ For an existing clone, **first preserve any local work**. Do not automatically d
 
 ```sh
 git fetch origin
-git switch prototype/three-stop-tour
+git switch main
 # If the local branch is missing, use this instead of the switch above:
-# git switch --track origin/prototype/three-stop-tour
-git pull --ff-only origin prototype/three-stop-tour
+# git switch --track origin/main
+git pull --ff-only origin main
 git log -1 --oneline
 npm ci
 npm run dev
@@ -81,10 +116,11 @@ npm run dev
 
 If switching or fast-forwarding is blocked by local work/divergence, stop and resolve it deliberately; do not use `reset --hard`.
 
-- **Main playtest:** http://127.0.0.1:5173/?prototype=tour
-- **Original comparison:** http://127.0.0.1:5173/; Bay, Station and Garden remain independently selectable with `?prototype=bay`, `?prototype=station` and `?prototype=garden`.
-- **Use `npm run dev`, not `npm run preview`, for Tour.** Production/preview deliberately ignore prototype selectors and show the original game without the test bridge.
-- Browser bests/`localStorage` do not transfer. Ignored screenshots, test outputs and dependencies do not transfer either; regenerate dependencies with `npm ci` and artifacts with tests. Local review images under `artifacts/destination-navigation-review/` are not shipped assets or dependencies.
+- **Official Tour, local development:** http://127.0.0.1:5173/ (explicit `?prototype=tour` is equivalent).
+- **Official Tour, production preview:** http://127.0.0.1:4173/tiny-planet-courier/ after building; all prototype overrides are ignored and no test bridge is exposed.
+- **Online play:** https://tonghaoch.github.io/tiny-planet-courier/ . The primary verifies the public revision separately from local preview observations.
+- **Development-only comparison:** http://127.0.0.1:5173/?prototype=standard; Bay, Station and Garden remain independently selectable with `?prototype=bay`, `?prototype=station` and `?prototype=garden`.
+- Browser bests/`localStorage` do not transfer. Ignored screenshots, capture scripts, test outputs and dependencies do not transfer either; regenerate dependencies with `npm ci` and validation artifacts with tests. The two selected `docs/screenshots/*.jpg` files do transfer as documentation assets; `artifacts/destination-navigation-review/` and `artifacts/tour-release/` remain local-only.
 - The game needs no local agent worktrees, models, credentials or backend. Agent collaboration policy is the committed `AGENTS.md`, discovered through the `CLAUDE.md` pointer.
 
 ### Current destination-compass contract
@@ -165,7 +201,7 @@ PLAYWRIGHT_CHANNEL=chrome npm run test:browser -- tests/browser/ui-readability.s
 
 The historical macOS full development command passed **85/85**. On the earlier Windows host, separate fresh-process files/suites helped isolate long-lived Edge page-load stalls; the historical checkpoint did not establish a permanent environment fix. If webServer startup stalls, check port ownership before starting your own `npm run dev` or stopping a process; never kill an unrelated server.
 
-**Next gates:** the CURRENT left-hint/left-toast/light-frost HUD is owner-visually accepted/frozen as the baseline, independently of the prior `aa853e6` approval; this prototype-branch checkpoint/push is explicitly requested. Recommend an owner-driven real-input **Bakery → Station → Garden → closing road** playtest, including at least a recovery/restart check, to validate destination-compass usability, road handoffs, left-side hints during actual driving and whole-journey pacing. Visual praise and automated checks do not satisfy these gameplay gates. Preserve accepted driving and route rhythms; do not default to new features or further cosmetics. If gameplay is accepted, production promotion/main merge/Pages can be proposed separately, still requiring explicit authorization.
+**Acceptance gates closed — 2026-09-09:** the owner accepted the HUD and personally completed Tour with no blocking issues, then explicitly authorized main promotion and automatic Pages deployment. Preserve the accepted driving, route rhythms and visual baseline; no new features or cosmetic pass are part of this release. The primary's exact-SHA CI/public-site verification is a publication check, not a request for more owner acceptance.
 
 ## Historical development handoff — Three-stop Tour
 
@@ -359,7 +395,7 @@ Garden remains a short, independently selected delivery. Do not retune Bay or St
 | Session and UI | `src/game.ts`, `src/ui.ts`, `src/style.css` | Completion policy, separate records, feedback, progress and compact result card |
 | Sound | `src/audio.ts` | Optional driving/impact audio, mute, pause and lifecycle cleanup |
 | Route validation | `src/bay-route.test.ts`, `src/station-route.test.ts`, `src/garden-route.test.ts`, `tests/helpers/bay-pilot.ts`, `tests/browser/` | Real-controller route completion and browser interaction checks |
-| Production isolation | `tests/production/prototype.spec.ts`, `playwright.preview.config.ts` | Original-only preview and absence of the test bridge |
+| Production isolation | `tests/production/prototype.spec.ts`, `playwright.preview.config.ts` | Official Tour default under all query overrides, no test bridge, real keyboard lifecycle and narrow pointer input |
 
 Keep geometry and physics in agreement. If changing ramp length/rise, shore positions, or landing dimensions, update the shared level data and recheck actual flight ranges. Do not create a visual-only ramp or a hidden support surface across the water.
 
@@ -391,7 +427,11 @@ Browser tests default to a locally installed **Microsoft Edge**. `PLAYWRIGHT_CHA
 
 Generated screenshots and test diagnostics go into ignored `artifacts/` and `test-results/` directories. Vite reports a non-blocking bundle-size warning; do not turn this playtest into an unrelated bundling rewrite unless measured loading problems justify it.
 
-## Next decision: owner feedback on the connected journey
+<a id="next-decision-owner-feedback-on-the-connected-journey"></a>
+
+## Historical decision record: owner feedback on the connected journey
+
+The slice feedback and expansion checklist below preserve the earlier development sequence. The connected-Tour feedback and release-policy decisions are now complete as recorded in the current handoff; publication itself is verified separately by the primary.
 
 ### 1. Preserve the accepted baseline
 
@@ -425,6 +465,6 @@ Make a small change, replay all three prototypes, and preserve the regression te
 - [x] Obtain the owner's explicit request to commit/push the accepted Garden checkpoint.
 - [x] Approve the connected Tour map/session design separately from the accepted slices; see [tour-plan.md](tour-plan.md).
 - [x] Complete DEV-only Tour implementation and independent coordinator verification for local playtesting.
-- [ ] Obtain owner feedback on the connected journey; automated checks do not satisfy this gate.
-- [ ] Decide explicitly how prototypes become the production game, and promote/remove the DEV-only gate deliberately.
-- [ ] Merge/deploy to `main` only when the owner separately approves that release step.
+- [x] Obtain owner feedback on the connected journey: personally completed, no blocking issues (2026-09-09); this is owner acceptance, not an inference from automated checks.
+- [x] Decide explicitly how Tour becomes the production game: official default at both roots, with standalone/standard comparisons DEV-only; entry changes are primary-verified.
+- [x] Obtain separate explicit authorization for main merge and automatic Pages deployment. Primary verifies actual publication and exact SHA separately; this checked item records authorization, not completed deployment.

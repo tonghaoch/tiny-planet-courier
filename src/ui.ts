@@ -58,6 +58,7 @@ export class UI {
   get bayPrototype() { return this.prototype?.id === 'bay'; }
 
   constructor(readonly prototype: PrototypeDefinition | null = null) {
+    const isPlaytest = prototype !== null && prototype.id !== 'tour';
     this.app.dataset.prototype = prototype?.id ?? 'standard';
     this.app.innerHTML = `
       <div class="sky-glow" aria-hidden="true"></div>
@@ -66,9 +67,9 @@ export class UI {
       <header class="masthead">
         <button class="brand" data-action="home" aria-label="Back to Tiny Planet home">
           <span class="brand-orbit">${icons.planet}</span>
-          <span class="brand-type"><strong>Tiny Planet</strong><span>${prototype ? `${prototype.name.toUpperCase()} PLAYTEST` : 'TINY PLANET COURIER'}</span></span>
+          <span class="brand-type"><strong>Tiny Planet</strong><span>${isPlaytest ? `${prototype.name.toUpperCase()} PLAYTEST` : 'TINY PLANET COURIER'}</span></span>
         </button>
-        <div class="header-center"><span class="live-dot"></span>${prototype ? `${prototype.name} · Local playtest` : 'Interstellar post · Open today'}</div>
+        <div class="header-center"><span class="live-dot"></span>${isPlaytest ? `${prototype.name} · Local playtest` : 'Interstellar post · Open today'}</div>
         <div class="header-actions">
           <button class="sound-button" id="sound-button" data-action="sound" aria-label="Enable sound effects" aria-pressed="false">${icons.sound}<span id="sound-label">Sound off</span></button>
           <button class="icon-button pause-button" data-action="pause" aria-label="Pause game">${icons.pause}</button>
@@ -85,7 +86,7 @@ export class UI {
           <button class="start-button" data-action="start"><span class="start-icon">${icons.parcel}</span><span>Start delivering</span>${icons.arrow}</button>
           <p class="start-caption"><span class="tiny-dot"></span>No downloads<span>·</span>No time limit<span>·</span>Just explore</p>
           <div class="trip-ticket">
-            <div class="ticket-top"><span>${prototype?.home.ticketHeading ?? 'YOUR FIRST ROUTE'}</span><span class="ticket-stamp">${prototype ? 'PLAYTEST' : 'READY TO GO'}</span></div>
+            <div class="ticket-top"><span>${prototype?.home.ticketHeading ?? 'YOUR FIRST ROUTE'}</span><span class="ticket-stamp">${isPlaytest ? 'PLAYTEST' : 'READY TO GO'}</span></div>
             <div class="ticket-route"><div><span class="route-dot"></span><strong>${prototype?.home.place ?? 'Mint Planet'}</strong><small>${prototype?.home.code ?? 'MINT-01'}</small></div><span class="dotted-line"></span>${icons.parcel}<div class="ticket-count"><strong id="parcel-count">—</strong><small>${prototype?.home.parcelLabel ?? 'little surprises'}</small></div></div>
             <div class="ticket-bottom"><span id="ticket-next">Next: ${prototype?.destinationName ?? 'Sunrise Bakery'}</span><span>${prototype?.home.ticketDetail ?? 'Warm croissants ↗'}</span></div>
           </div>
@@ -127,7 +128,7 @@ export class UI {
       <section class="modal-backdrop" data-view="paused" hidden>
         <div class="modal pause-modal" role="dialog" aria-modal="true" aria-labelledby="pause-title">
           <span class="modal-illustration">${icons.planet}</span><span class="eyebrow">TAKE A LITTLE BREAK</span>
-          <h2 id="pause-title">The planet can wait.</h2><p>Take a breath. Your ${prototype ? 'parcel' : 'parcels'} and the view will be here.</p>
+          <h2 id="pause-title">The planet can wait.</h2><p>Take a breath. Your ${isPlaytest ? 'parcel' : 'parcels'} and the view will be here.</p>
           <button class="start-button" data-action="resume">Resume journey ${icons.arrow}</button>
           <div class="modal-secondary"><button data-action="restart">${prototype?.id === 'tour' ? 'Restart tour' : 'Restart delivery'}</button><button data-action="home">Back to home</button></div>
         </div>
@@ -135,7 +136,7 @@ export class UI {
       <section class="modal-backdrop" data-view="complete" hidden>
         <div class="modal complete-modal" role="dialog" aria-modal="true" aria-labelledby="complete-title">
           <div class="complete-badge">${icons.parcel}<span>✦</span></div><span class="eyebrow">ALL THE LITTLE THINGS, DELIVERED.</span>
-          <h2 id="complete-title">All smiles, delivered.</h2><p>${prototype ? 'One parcel. One smile.' : 'Three parcels. Three smiles.'}<br>You made this little planet's day.</p>
+          <h2 id="complete-title">All smiles, delivered.</h2><p>${isPlaytest ? 'One parcel. One smile.' : 'Three parcels. Three smiles.'}<br>You made this little planet's day.</p>
           <div class="result-stats"><div><small>Journey time</small><strong id="result-time">00:00</strong></div><span></span><div><small>Personal best</small><strong id="best-time">—</strong></div></div>
           <span id="record-label" class="record-label">Every trip brings a new view.</span>
           <button class="start-button" data-action="restart">Play again ${icons.arrow}</button>

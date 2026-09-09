@@ -2,7 +2,7 @@ import { TOUR_RECORD_KEY } from './tour-session';
 
 export type PrototypeId = 'bay' | 'station' | 'garden' | 'tour';
 
-/** Authored playtest identity and copy only; scene construction stays outside the UI. */
+/** Authored delivery identity and copy only; scene construction stays outside the UI. */
 export interface PrototypeDefinition {
   readonly id: PrototypeId;
   readonly bestScoreKey: string;
@@ -140,7 +140,7 @@ export const PROTOTYPES: Readonly<Record<PrototypeId, PrototypeDefinition>> = {
     destinationName: 'Sunrise Bakery',
     parcelDescription: 'Three parcels for three neighbors',
     home: {
-      eyebrow: 'THREE-STOP TOUR · A LOCAL PLAYTEST',
+      eyebrow: 'THREE-STOP TOUR',
       title: 'Three stops.<br>One big <span class="warm-word">day.</span>',
       description: 'Bakery, station, garden. One connected journey.<br>Pick your paths and follow the roads between stops.',
       ticketHeading: 'ONE PLANET · THREE STOPS',
@@ -163,7 +163,8 @@ export const PROTOTYPES: Readonly<Record<PrototypeId, PrototypeDefinition>> = {
 };
 
 export function selectPrototype(search: string, development: boolean): PrototypeDefinition | null {
-  if (!development) return null;
+  if (!development) return PROTOTYPES.tour;
   const id = new URLSearchParams(search).get('prototype');
-  return id === 'bay' || id === 'station' || id === 'garden' || id === 'tour' ? PROTOTYPES[id] : null;
+  if (id === 'standard') return null;
+  return id === 'bay' || id === 'station' || id === 'garden' || id === 'tour' ? PROTOTYPES[id] : PROTOTYPES.tour;
 }
