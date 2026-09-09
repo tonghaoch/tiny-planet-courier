@@ -35,7 +35,7 @@ Hop into your little van and bring a bit of joy to **Sunrise Bakery**, **Stargaz
 
 ## Run locally
 
-> **Continuing on another computer?** Use **`prototype/three-stop-tour`**, not the older Bay checkpoint. On **2026-09-09**, the owner approved the small-screen welcome fix and compact, more-transparent HUD and requested this checkpoint's commit/push, including the verified CSS/test changes and updated docs. **`56c92fc` is the previous published baseline**, not the new checkpoint's hash. The primary performs and verifies the pending Git operations; after publication, clone/update the branch and identify the received revision with `git log -1 --oneline`. See the **[current cross-computer handoff](docs/iteration-plan.md#current-checkpoint-and-cross-computer-handoff--2026-09-08)**. Production remains original-only; no main merge or Pages deployment is authorized.
+> **Continuing on another computer?** Use **`prototype/three-stop-tour`**, not the older Bay checkpoint. This owner-approved checkpoint packages the verified left-hint/left-toast/light-frost HUD over **previous published baseline `aa853e6`, `Compact navigation HUD and fix mobile welcome layout`**. On 2026-09-09, the owner separately praised this CURRENT version ("very good, great, this version is very good") and explicitly requested **commit + push, then the next step**. This is distinct from the earlier `aa853e6` approval. Use `git log -1 --oneline` after the existing clone/switch/pull instructions to identify the actual received revision; the primary owns Git execution and remote-SHA verification, and no new push success or SHA is claimed here. See the **[current cross-computer handoff](docs/iteration-plan.md#current-checkpoint-and-cross-computer-handoff--2026-09-08)**. Authorization covers only this prototype-branch checkpoint/push, not promotion, main merge or deployment; production remains original-only.
 
 Requires Node.js 20.19+ or 22.12+ (recommend Node.js 24; current macOS verification used v24.13.1 and npm 11.10.1).
 
@@ -81,7 +81,7 @@ Open **http://127.0.0.1:5173/?prototype=garden** to bring a packet of **flower s
 
 ### Three-stop Tour playtest — development only
 
-Open **http://127.0.0.1:5173/?prototype=tour** for the connected **Sunrise Bakery → Stargaze Station → Windmill Garden** journey. Implementation and primary independent checks are complete on `prototype/three-stop-tour`; this owner-requested checkpoint adds the verified CSS-only compact-HUD/welcome refinement over `56c92fc`. The new visual treatment received positive owner approval on **2026-09-09**. Final destination-compass and overall connected-journey gameplay acceptance remain pending; visual feedback does not satisfy those separate gates. No production promotion, main merge or Pages deployment; the public game remains original-only.
+Open **http://127.0.0.1:5173/?prototype=tour** for the connected **Sunrise Bakery → Stargaze Station → Windmill Garden** journey. The **2026-09-09** left-context/soft-glass follow-up is primary-verified and now separately owner-visually accepted, beyond the prior **`aa853e6`** approval; refresh the development server to try it. The owner explicitly requested this prototype-branch checkpoint/push. **Freeze the accepted HUD baseline; next, the owner should drive a complete Tour through the closing road, including at least a recovery/restart check**, to assess destination-compass usability, road handoffs, left-side hints during actual driving and whole-journey pacing. Visual praise and automated tests do not satisfy these gameplay gates. If accepted, production promotion/main merge/Pages can be proposed separately and still require explicit authorization; the public game remains original-only.
 
 - All three accepted local courses share one planet, joined by visible roads. Choose the wide or shorter path at each stop; there are no scene swaps or automatic van resets between deliveries.
 - Start with three small parcels on the rack. Each delivery removes one, starts that neighbor's reaction, and immediately retargets the compass to the next **delivery destination**, not the connecting road. Road hints still describe the transfer; if an exit is behind the van, reverse and turn gently.
@@ -107,7 +107,9 @@ The primary also compared actual rendered DOM arrow angles against an independen
 
 <a id="compact-hud-and-small-screen-welcome--locally-verified-owner-approval-pending"></a>
 
-### Compact HUD and small-screen welcome — verified and visually approved
+### Historical compact HUD and small-screen welcome — verified and visually approved at `aa853e6`
+
+These styling details and macOS checks describe the previous published checkpoint, not the newly accepted treatment. See the [current left-context/soft-glass handoff](docs/iteration-plan.md#current-left-context-and-soft-glass-iteration--2026-09-09) for the `.18` glass, left hint/toast, reduced-motion repair and latest primary-supplied verification.
 
 The 2026-09-08 refinement changes only `src/style.css` and permanent expectations in `tests/browser/ui-readability.spec.ts`. Compact-portrait spacing reclaims **20px** without reducing welcome text or CTA sizes: the 320×640 Tour globe now measures **177.65625px**, above the unchanged 170px gate, with paragraph/CTA clearance and visibility preserved.
 
@@ -152,7 +154,7 @@ npm run preview
 - `test:preview`: Builds and checks that production still shows the original game and never exposes the local test bridge. Use `PLAYWRIGHT_CHANNEL=chrome npm run test:preview` to select Chrome instead of Edge.
 - Browser screenshots are saved to `artifacts/`. Failure diagnostics are saved to `test-results/`.
 
-Run development-browser and production-preview checks **sequentially**. If an earlier Windows host's long-lived Edge session stalls page loads, use separate fresh processes and check port ownership before handling server startup issues. See the [handoff's reproduction commands](docs/iteration-plan.md#reproduce-checks-and-host-limitations) for the current full Chrome run and focused welcome repeat.
+Run development-browser and production-preview checks **sequentially**. If an earlier Windows host's long-lived Edge session stalls page loads, use separate fresh processes and check port ownership before handling server startup issues. See the [current handoff](docs/iteration-plan.md#current-left-context-and-soft-glass-iteration--2026-09-09) for the latest sequential Edge split commands; the [historical reproduction section](docs/iteration-plan.md#reproduce-checks-and-host-limitations) preserves the earlier full Chrome run and focused welcome repeat.
 
 The production build uses the `/tiny-planet-courier/` base path. After building, `npm run preview` serves it at **http://127.0.0.1:4173/tiny-planet-courier/** by default; `npm run dev` still uses the root URL. Update `vite.config.ts` if you deploy under a different path or a custom domain. Do not launch the source by double-clicking `index.html` with a `file://` URL.
 

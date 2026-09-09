@@ -99,12 +99,14 @@ export class UI {
           <div class="navigation-destination"><span class="navigation-label">Next stop</span><h2 id="mission-name">${prototype?.destinationName ?? 'Sunrise Bakery'}</h2></div>
           <span class="direction-disc" aria-hidden="true"><svg id="direction-arrow" viewBox="0 0 24 24" fill="currentColor"><path d="m12 3 7 17-7-4-7 4Z"/></svg><span id="direction-cue" hidden>P</span></span>
           <div class="navigation-distance"><strong id="mission-distance">0 m</strong><span id="mission-index">01 / —</span></div>
-          <p id="mission-hint">${prototype?.hints.choice ?? 'Take the scenic route'}</p>
           <div class="delivery-meter" aria-hidden="true"><span id="delivery-meter"></span></div>
         </section>
-        <div class="mission-card">
-          <div class="mission-top"><span>Your parcel</span></div>
-          <p id="mission-parcel">${prototype?.parcelDescription ?? 'A bag of warm croissants'}</p>
+        <div id="mission-context" class="mission-context" hidden>
+          <p id="mission-hint">${prototype?.hints.choice ?? 'Take the scenic route'}</p>
+          <div class="mission-card">
+            <div class="mission-top"><span>Your parcel</span></div>
+            <p id="mission-parcel">${prototype?.parcelDescription ?? 'A bag of warm croissants'}</p>
+          </div>
         </div>
         <div class="run-time"><span>Journey time</span><strong id="run-time">00:00</strong></div>
         <div class="driving-console">
@@ -169,7 +171,7 @@ export class UI {
       if (button) this.onAction(button.dataset.action!);
     });
     const geometryObserver = new ResizeObserver(() => this.invalidateGeometry());
-    this.app.querySelectorAll<HTMLElement>('.masthead, .hero-copy, .hero-description, .hero-copy > .start-button, .navigation-hud, .mission-card, .run-time, .touch-controls, .driving-console, .delivery-queue, .drive-hint, .toast, .bay-result, .tour-result').forEach(element => geometryObserver.observe(element));
+    this.app.querySelectorAll<HTMLElement>('.masthead, .hero-copy, .hero-description, .hero-copy > .start-button, .navigation-hud, .mission-context, #mission-hint, .mission-card, .run-time, .touch-controls, .driving-console, .delivery-queue, .drive-hint, .toast, .bay-result, .tour-result').forEach(element => geometryObserver.observe(element));
     window.addEventListener('resize', () => this.invalidateGeometry());
     this.app.querySelector('.home-view')!.addEventListener('scroll', () => this.invalidateGeometry(), { passive: true });
     document.fonts.ready.then(() => this.invalidateGeometry());
@@ -235,10 +237,36 @@ export class UI {
           : { x: (hero.right + width) / 2, y: height * 0.51, diameter: Math.min((width - hero.right) * 0.88, height * 0.68) };
       }
       const navigation = this.elements.get('navigation-hud')!;
-      const bottom = navigation.hidden ? (height <= 500 ? 68 : 100) : navigation.getBoundingClientRect().bottom;
-      this.app.style.setProperty('--navigation-bottom', `${bottom}px`);
+      const navigationRect = navigation.getBoundingClientRect();
+      const context = this.elements.get('mission-context')!;
+      const toast = this.elements.get('toast')!;
+      const masthead = this.app.querySelector('.masthead')!.getBoundingClientRect();
+      const bottom = navigation.hidden ? masthead.bottom : navigationRect.bottom;
+      // Place overlays one-way: navigation bounds position the context, then the
+      // context's non-transitioning bounds position the toast.
+      context.style.setProperty('--navigation-bottom', `${bottom}px`);
+      context.style.setProperty('--navigation-top', `${navigationRect.top}px`);
+      context.style.setProperty('--navigation-left', `${navigationRect.left}px`);
+      const contextBounds = [context, ...context.querySelectorAll<HTMLElement>('#mission-hint, .mission-card')]
+        .map(element => element.getBoundingClientRect()).filter(rect => rect.width && rect.height);
+      let contextBottom = navigation.hidden ? masthead.bottom : Math.max(...contextBounds.map(rect => rect.bottom), navigationRect.top);
+      toast.style.setProperty('--navigation-left', `${navigation.hidden ? width : navigationRect.left}px`);
+      toast.style.setProperty('--context-bottom', `${contextBottom}px`);
+      if (navigation.hidden && !(width >= 761 && height <= 500)) {
+        // Completion notices remain visible outside the hidden navigation. Start
+        // below the masthead, yielding to results only when they occupy this slot.
+        const toastRect = toast.getBoundingClientRect();
+        for (const result of this.app.querySelectorAll<HTMLElement>('.bay-result, .tour-result')) {
+          const rect = result.getBoundingClientRect();
+          if (rect.width && rect.height && toastRect.left < rect.right && toastRect.right > rect.left
+            && contextBottom + 12 < rect.bottom && contextBottom + 12 + toastRect.height > rect.top - 12) {
+            contextBottom = rect.bottom;
+          }
+        }
+        toast.style.setProperty('--context-bottom', `${contextBottom}px`);
+      }
       this.labelObstacles = [];
-      this.app.querySelectorAll<HTMLElement>('.masthead, .navigation-hud, .mission-card, .run-time, .touch-controls, .driving-console, .delivery-queue, .drive-hint, .toast.visible, .bay-result, .tour-result').forEach(element => {
+      this.app.querySelectorAll<HTMLElement>('.masthead, .navigation-hud, .mission-context, #mission-hint, .mission-card, .run-time, .touch-controls, .driving-console, .delivery-queue, .drive-hint, .toast.visible, .bay-result, .tour-result').forEach(element => {
         const rect = element.getBoundingClientRect();
         if (rect.width && rect.height) this.labelObstacles.push(rect);
       });
@@ -254,7 +282,9 @@ export class UI {
   }
 
   private syncNavigationVisibility() {
-    this.elements.get('navigation-hud')!.hidden = this.lastMode !== 'playing' || !this.hasTarget || this.app.classList.contains('has-error');
+    const hidden = this.lastMode !== 'playing' || !this.hasTarget || this.app.classList.contains('has-error');
+    this.elements.get('navigation-hud')!.hidden = hidden;
+    this.elements.get('mission-context')!.hidden = hidden;
     this.invalidateGeometry();
   }
 

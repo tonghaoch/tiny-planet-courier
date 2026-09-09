@@ -4,11 +4,55 @@
 
 ## Current checkpoint and cross-computer handoff — 2026-09-09
 
-**Owner-approved visual checkpoint:** on 2026-09-09, the owner responded positively ("Very good") to the small-screen welcome repair and compact, more-transparent HUD, and explicitly requested updated handoff documentation plus commit/push on **`prototype/three-stop-tour`** at origin `https://github.com/tonghaoch/tiny-planet-courier.git`. This checkpoint adds the verified `src/style.css` refinement, `tests/browser/ui-readability.spec.ts` updates and these handoff documents to the connected Tour/destination-compass baseline. Use this branch, **not the older `prototype/bay-leap` checkpoint**.
+**Owner-approved checkpoint — 2026-09-09 (Windows local date):** this checkpoint packages the completed, primary-independently-verified left hint/context stack and much more transparent, lightly frosted navigation on **`prototype/three-stop-tour`**. Source changes are only `src/ui.ts` and `src/style.css`; permanent regressions are only in `tests/browser/ui-readability.spec.ts`. No destination-bearing, physics, routes, camera, controls, welcome-layout or delivery/session changes.
 
-**Previous published baseline: `56c92fc`**, not the new checkpoint's revision. Before checkpoint preparation, the primary fetched origin and confirmed `HEAD...origin/prototype/three-stop-tour` was **0/0**. The primary will review, commit, push and verify publication separately; this documentation does not claim the pending push succeeded. After publication, use the clone/update workflow below and `git log -1 --oneline` to identify the received revision rather than assuming a future hash.
+**Previous published baseline: `aa853e6` — `Compact navigation HUD and fix mobile welcome layout`.** That checkpoint's positive visual approval and earlier commit/push request followed `56c92fc`; that push is not a pending task. Separately, on 2026-09-09 the owner enthusiastically approved the CURRENT left-hint/left-toast/light-frost version ("very good, great, this version is very good") and explicitly requested **commit + push, then the next step**. Use this branch, **not the older `prototype/bay-leap` checkpoint**; the clone/switch/pull commands below and `git log -1 --oneline` identify the actual received revision.
 
-The application/test diff remains byte-identical to the independently verified 2026-09-08 patch; no new test run is claimed for this documentation update. **Visual approval does not establish final destination-compass or complete Tour gameplay acceptance; those gates remain pending.** No prototype production promotion, main merge or Pages deployment is authorized. The previous main/Pages baseline remains `8656d31`; production remains original-only.
+**Authorization covers this prototype-branch checkpoint/push only: no main merge, prototype promotion or deployment.** The HUD visual treatment is accepted/frozen as a baseline; final destination-compass and complete Tour gameplay acceptance remain separate pending gates. Before packaging, the primary freshly fetched origin, confirmed HEAD/upstream **0/0** at the previous baseline, and matched source/test SHA256 against the exact independently tested implementation; the existing results below remain valid. The primary owns Git execution and remote-SHA verification; this record claims neither a successful new push nor a new SHA. The previous main/Pages baseline remains `8656d31`; production remains original-only. This documentation-only update records primary-supplied evidence and runs no validation.
+
+### Current left-context and soft-glass iteration — 2026-09-09
+
+- The single `#mission-hint` is extracted into a left context stack above the existing parcel card, with no broad hint backing. Desktop aligns left of the centered navigation; at **≤760px**, the hint is **16px from the left**, **≤220px wide**, and **8px below navigation**.
+- Context disappears with navigation on home, pause, no target, completion and error. Marker avoidance and geometry remain cached/event-driven.
+- Transient `#toast` also moves left below context/parcel on desktop, using real measured bounds and a **12px gap**; portrait is left-aligned and capped at **220px**. The existing short-landscape lower-left slot, readable message surface, `aria-live`/status, `pointer-events: none` and **3600ms** duration remain. Completion notices avoid the masthead/results.
+- Normal navigation is **`rgba(2, 8, 10, .18)`**, **`blur(2px) saturate(1.02)`**, with disc alpha **`.22`** and subtle border/shadow. Fully opaque **`#fffdf5` text / `#ffc59c` arrow** have thin dark **`#07151c` outlines**, not opaque rectangular text chips. The **`.96`, no-blur** reduced-transparency/unsupported-filter fallback remains.
+- Computed outline/direct-fallback contrast and actual white/black/pattern screenshots were reviewed. This is **not** a full-panel 4.5:1 contrast claim at alpha `.18`, universal pixel validation, or actual Safari validation. Fonts, compass centering and widths are preserved.
+
+| Actual Tour viewport | Before navigation width × height | After navigation width × height |
+| --- | --- | --- |
+| 1440×900 | 420 × 102.4 | 420 × 79 |
+| 320×640 | 207.2 × 95.8 | 207.1875 × 61.59375 |
+| 844×390 | 364 × 65.6 | 364 × 48 |
+| 390×844 | — | 256.1875 × 54 |
+
+**Reduced-motion repair:** primary inspection found that the existing universal `.01ms` transition duration unintentionally animated context top/width via default `transition-property: all`; immediate layout reads cached pre-transition coordinates. An independent fresh-browser intervention confirmed disabling context transitions fixes it. Permanent `.mission-context { transition-property: none; }` and fresh-start/handoff normal + reduced-motion regressions were added. The earlier unverified common-ancestor-variable hypothesis is not the root cause.
+
+**Primary independent verification — Windows, Node v24.18.0, npm 11.16.0, Microsoft Edge:**
+
+| Check | Observed result |
+| --- | --- |
+| Unit / build | **192 tests in 21 files passed**; TypeScript/production build passed. Existing >500kB warning only; **JS 684.27kB / gzip 181.67kB**. |
+| Independent UI inspection | **15 geometry/paint samples across 6 actual viewports**, initial/handoff states and **3 white/dark/pattern fixtures** passed; no page errors. Screenshots visually reviewed. Pose/docking fixtures prove UI only, not route playability. |
+| Development regressions | **All 89 distinct cases passed in sequential fresh-process groups:** UI compact **25** + desktop **21** = **46**; navigation **23**; game + Tour **10**; standalone Bay/Station/Garden **10**. **Not one all-in-one 89/89 command.** |
+| Real-controller coverage | Bay launch, all routes, complete wide/short Tours and closing road, and 320px completion passed. |
+| Final production isolation | **6/6 passed after the final development group.** An earlier 6/6 also passed; it does not increase the distinct test count. |
+
+**Initial UI attempt and test-only repair:** **41/46** passed; five **844px** cases waited for `.toast.visible` after newly added lengthy assertions plus the old **1800ms** settle, by which time the unchanged **3600ms** toast had correctly expired. The unchanged settle now runs immediately after Start, followed by an atomic live toast + van sample before expensive layout checks. Final **46/46** passed in **25 + 21** groups. No application duration/timeouts or assertions were weakened. This was test ordering, **not** the historical Windows page-load stalls.
+
+Reproduce sequentially in fresh processes (Edge default); these are the actual split filters, not a claimed single full-suite run:
+
+```sh
+npm test
+npm run build
+npm run test:browser -- tests/browser/ui-readability.spec.ts --grep-invert 'navigation glass treatment|1440x900|1920x1080|1024x768'
+npm run test:browser -- tests/browser/ui-readability.spec.ts --grep 'navigation glass treatment|1440x900|1920x1080|1024x768'
+npm run test:browser -- tests/browser/navigation.spec.ts
+npm run test:browser -- tests/browser/game.spec.ts tests/browser/tour.spec.ts
+npm run test:browser -- tests/browser/bay.spec.ts tests/browser/station.spec.ts tests/browser/garden.spec.ts
+npm run test:preview
+```
+
+Local review artifacts under **`artifacts/soft-glass-hud-review/` are ignored**, not committed screenshots or persistent transferred browser records. The development server remains **http://127.0.0.1:5173/?prototype=tour**; refresh to try the current checkout. Use **`npm run dev`, not preview**. This owner-approved checkpoint packages the verified implementation over previous published baseline `aa853e6`; use the commands below to identify the received revision.
 
 ### Continue on another computer
 
@@ -50,7 +94,11 @@ If switching or fast-forwarding is blocked by local work/divergence, stop and re
 - Shortest-arc frame-independent smoothing, reduced motion, glass HUD, parking/recovery cues and hidden home/pause/completed navigation remain intact. A coincident airborne destination has no invented heading. R, splash recovery, restart, home and handoffs clear stale navigation state.
 - Tour continuity, three parcels, splits, earned checkpoints and accepted route geometry/physics are unchanged. Pose fixtures isolate UI/target behavior, not route playability; real-input route tests provide the latter evidence. See [navigation-stability-plan.md](navigation-stability-plan.md).
 
-### Current compact-HUD and welcome refinement — 2026-09-08
+<a id="current-compact-hud-and-welcome-refinement--2026-09-08"></a>
+
+### Historical compact-HUD and welcome refinement — 2026-09-08
+
+The following refinement and macOS checks belong to published checkpoint `aa853e6`, visually approved by the owner on 2026-09-09. They are historical, not the current soft-glass styling or verification.
 
 Application changes are confined to **`src/style.css`**; permanent test changes are confined to **`tests/browser/ui-readability.spec.ts`**. Main/UI TypeScript, the active-destination compass, driving, route geometry, game sessions, records, camera rules and control hit targets are unchanged.
 
@@ -65,7 +113,7 @@ Application changes are confined to **`src/style.css`**; permanent test changes 
 
 Normal glass is now **`rgba(2, 8, 10, .56)`**, replacing `rgba(16, 40, 47, .63)`, with the same `blur(5px) saturate(1.08)`. Warm-white text and coral arrows remain fully opaque; there is no opacity on the HUD or its ancestors. Independent composition of actual styles measured minimum white-background contrast **4.58575:1 for text** and **5.39172:1 for the arrow with its unchanged local disc**. Assertions retain text ≥4.5 and arrow ≥3 over white and black, without credit for shadows. Unsupported-filter fallback and reduced transparency retain `rgba(16, 40, 47, .96)`, no blur, and unchanged geometry when preferences toggle.
 
-### Current verification — primary-supplied results
+### Historical compact-HUD verification — primary-supplied results
 
 The primary independently reviewed the actual checkout and ran these checks on **2026-09-08, macOS, Node v24.13.1, npm 11.10.1, local Chrome via `PLAYWRIGHT_CHANNEL=chrome`**. Neither implementation nor documentation-only worker ran tests for this refinement.
 
@@ -88,7 +136,7 @@ The primary separately measured actual bounds, contrast, foreground opacity, abs
 
 These earlier checks were run by the primary, **not the documentation-only worker**, with **Node v24.18.0, npm 11.16.0 and local Microsoft Edge on Windows**.
 
-**All 85 distinct development cases had passing observations across sequential runs (42 + 1 + 42), NOT a clean 85/85 all-in-one command.** This remains the historical record, not the current macOS verification limit.
+**All 85 distinct development cases had passing observations across sequential runs (42 + 1 + 42), NOT a clean 85/85 all-in-one command.** These earlier checks are historical; the macOS checkpoint's single-run result is preserved separately above, and the current Windows iteration uses the explicitly grouped results at the top.
 
 | Check | Observed result |
 | --- | --- |
@@ -104,7 +152,7 @@ The primary independently compared the **actual rendered DOM arrow angle** with 
 
 ### Reproduce checks and host limitations
 
-Run browser suites and production-preview checks **sequentially**, never concurrently. Edge is the default; the current macOS verification explicitly selected installed Chrome:
+Run browser suites and production-preview checks **sequentially**, never concurrently. Use the current Windows split commands above for this checkpoint. Edge is the default; the historical macOS checkpoint explicitly selected installed Chrome:
 
 ```sh
 npm test
@@ -115,13 +163,13 @@ PLAYWRIGHT_CHANNEL=chrome npm run test:preview -- --output=artifacts/compact-hud
 PLAYWRIGHT_CHANNEL=chrome npm run test:browser -- tests/browser/ui-readability.spec.ts --grep 'readable welcome and centered HUD in tour at 320x640' --repeat-each=3
 ```
 
-The current full development command passed **85/85**. On the earlier Windows host, separate fresh-process files/suites helped isolate long-lived Edge page-load stalls; the historical checkpoint did not establish a permanent environment fix. If webServer startup stalls, check port ownership before starting your own `npm run dev` or stopping a process; never kill an unrelated server.
+The historical macOS full development command passed **85/85**. On the earlier Windows host, separate fresh-process files/suites helped isolate long-lived Edge page-load stalls; the historical checkpoint did not establish a permanent environment fix. If webServer startup stalls, check port ownership before starting your own `npm run dev` or stopping a process; never kill an unrelated server.
 
-**Next gates:** the primary reviews and performs the requested branch commit/push, independently verifying the resulting checkpoint. Owner visual approval is recorded above; hands-on destination-compass and complete connected-journey acceptance remain separate pending gates. Preserve accepted driving and route rhythms. Prototype production promotion, main merge and deployment remain unauthorized release steps.
+**Next gates:** the CURRENT left-hint/left-toast/light-frost HUD is owner-visually accepted/frozen as the baseline, independently of the prior `aa853e6` approval; this prototype-branch checkpoint/push is explicitly requested. Recommend an owner-driven real-input **Bakery → Station → Garden → closing road** playtest, including at least a recovery/restart check, to validate destination-compass usability, road handoffs, left-side hints during actual driving and whole-journey pacing. Visual praise and automated checks do not satisfy these gameplay gates. Preserve accepted driving and route rhythms; do not default to new features or further cosmetics. If gameplay is accepted, production promotion/main merge/Pages can be proposed separately, still requiring explicit authorization.
 
 ## Historical development handoff — Three-stop Tour
 
-The records below describe earlier phases, including their then-current no-commit/no-push status and road-following verification. They do not override the current checkpoint authorization, destination-compass contract or verification above.
+The records below describe earlier phases, including their then-current no-commit/no-push status and road-following verification. They do not override the current owner-approved checkpoint status, release boundary, destination-compass contract or verification above.
 
 - **Working branch:** `prototype/three-stop-tour`, based on accepted slice baseline `412ef66`.
 - **Entry:** http://127.0.0.1:5173/?prototype=tour (Vite development mode only).

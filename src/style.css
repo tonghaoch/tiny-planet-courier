@@ -383,10 +383,10 @@ h1 { font-family: Georgia, "Times New Roman", serif; font-weight: 400; font-size
 
 /* A symmetric grid centers the arrow itself, independently of text length.
    Widths are 70% of the former responsive bounds; content reflows at readable sizes. */
-.navigation-hud { position: absolute; top: 128px; left: 50%; transform: translateX(-50%); width: min(420px, calc(70% - 22.4px)); display: grid; grid-template-columns: minmax(0, 1fr) 50px minmax(0, 1fr); align-items: center; gap: 6px 12px; padding: 10px 14px 8px; border: 1px solid rgba(190, 210, 196, .24); border-radius: 9px; background: rgba(16, 40, 47, .96); -webkit-backdrop-filter: none; backdrop-filter: none; box-shadow: 0 4px 16px rgba(7, 21, 28, .16); color: #fffdf5; pointer-events: none; }
+.navigation-hud { position: absolute; top: 128px; left: 50%; transform: translateX(-50%); width: min(420px, calc(70% - 22.4px)); display: grid; grid-template-columns: minmax(0, 1fr) 50px minmax(0, 1fr); align-items: center; gap: 6px 12px; padding: 10px 14px 8px; border: 1px solid rgba(190, 210, 196, .14); border-radius: 9px; background: rgba(16, 40, 47, .96); -webkit-backdrop-filter: none; backdrop-filter: none; box-shadow: 0 2px 8px rgba(7, 21, 28, .08); color: #fffdf5; pointer-events: none; }
 /* Keep the road visible with restrained glass; unsupported browsers retain the solid fallback. */
-@supports ((backdrop-filter: blur(5px)) or (-webkit-backdrop-filter: blur(5px))) {
-  .navigation-hud { background: rgba(2, 8, 10, .56); -webkit-backdrop-filter: blur(5px) saturate(1.08); backdrop-filter: blur(5px) saturate(1.08); }
+@supports ((backdrop-filter: blur(2px)) or (-webkit-backdrop-filter: blur(2px))) {
+  .navigation-hud { background: rgba(2, 8, 10, .18); -webkit-backdrop-filter: blur(2px) saturate(1.02); backdrop-filter: blur(2px) saturate(1.02); }
 }
 @media (prefers-reduced-transparency: reduce) {
   .navigation-hud { background: rgba(16, 40, 47, .96); -webkit-backdrop-filter: none; backdrop-filter: none; }
@@ -397,19 +397,23 @@ h1 { font-family: Georgia, "Times New Roman", serif; font-weight: 400; font-size
 .navigation-distance { display: flex; flex-direction: column; align-items: flex-end; gap: 3px; }
 #mission-distance { font: 20px/1.1 Consolas, monospace; white-space: nowrap; }
 #mission-index { font: 10px/1.3 Consolas, monospace; color: #fffdf5; }
-.direction-disc { width: 50px; height: 50px; background: rgba(41, 75, 77, .80); border: 1px solid rgba(146, 182, 163, .35); }
+.direction-disc { width: 50px; height: 50px; background: rgba(41, 75, 77, .22); border: 1px solid rgba(146, 182, 163, .20); }
 .direction-disc svg { width: 34px; height: 34px; color: #ffc59c; transition: none; }
 #direction-cue { color: #fffdf5; font-size: 24px; line-height: 1; font-weight: 600; }
-#mission-hint { grid-column: 1 / -1; margin: 0; text-align: center; font-size: 12px; line-height: 1.45; color: #fffdf5; overflow-wrap: anywhere; }
+.navigation-label, #mission-name, #mission-distance, #mission-index, #direction-cue, #mission-hint { -webkit-text-stroke: 2px #07151c; paint-order: stroke fill; text-shadow: 0 1px 2px #07151c; }
+#direction-arrow path { stroke: #07151c; stroke-width: 2px; stroke-linejoin: round; paint-order: stroke fill; vector-effect: non-scaling-stroke; }
+.mission-context { position: absolute; top: var(--navigation-top, 128px); left: 4.3%; width: min(248px, calc(var(--navigation-left, 50vw) - 4.3vw - 12px)); display: flex; flex-direction: column; align-items: flex-start; gap: 12px; pointer-events: none; transition-property: none; }
+#mission-hint { width: 100%; max-width: 224px; margin: 0; text-align: left; font-size: 12px; line-height: 1.45; color: #fffdf5; overflow-wrap: anywhere; }
 .navigation-hud .delivery-meter { grid-column: 1 / -1; width: 100%; height: 3px; margin: 0; background: #47615f; border-radius: 2px; overflow: hidden; }
-.mission-card { top: 130px; padding: 17px 19px; background: #10282ff5; }
+.mission-context .mission-card { position: static; width: 248px; max-width: 100%; padding: 17px 19px; background: #10282ff5; }
 .mission-top { font-size: 12px; letter-spacing: .5px; }
 .mission-card p { margin-top: 10px; font-size: 14px; line-height: 1.5; color: #d5e0d5; letter-spacing: 0; }
 .run-time { padding: 8px 12px; border-radius: 6px; background: #10282ff5; }
 .run-time > span { font-size: 12px; letter-spacing: .2px; color: #bed2c4; }
 .target-marker { font-size: 13px; line-height: 1.35; background: #10282ff5; max-width: calc(100% - 24px); white-space: normal; text-align: center; }
 .marker-icon svg { width: 18px; height: 18px; }
-.toast { top: calc(var(--navigation-bottom, 280px) + 12px); max-width: min(580px, calc(100% - 32px)); font-size: 14px; line-height: 1.45; letter-spacing: 0; background: #203c3e; transform: translate(-50%, 0); }
+.toast, .toast.visible { top: calc(var(--context-bottom, 280px) + 12px); left: 4.3%; transform: none; max-width: min(224px, calc(var(--navigation-left, 50vw) - 4.3vw - 12px)); font-size: 14px; line-height: 1.45; letter-spacing: 0; background: #203c3e; }
+#toast-message { min-width: 0; overflow-wrap: anywhere; }
 .has-error :is(.game-hud, .touch-controls, .target-marker), #app:not([data-mode="playing"]) .toast { display: none; }
 
 @media (max-width: 1200px) {
@@ -433,7 +437,7 @@ h1 { font-family: Georgia, "Times New Roman", serif; font-weight: 400; font-size
   .direction-disc { width: 44px; height: 44px; }
   .direction-disc svg { width: 32px; height: 32px; }
   .run-time { top: 80px; right: 20px; }
-  .toast { top: calc(var(--navigation-bottom, 210px) + 8px); padding: 8px 14px; }
+  .toast { padding: 8px 14px; }
   .drive-hint { bottom: 14px; }
 }
 @media (max-width: 760px) {
@@ -455,6 +459,7 @@ h1 { font-family: Georgia, "Times New Roman", serif; font-weight: 400; font-size
   .direction-disc { width: 40px; height: 40px; }
   .direction-disc svg { width: 28px; height: 28px; }
   #mission-distance { font-size: 18px; }
+  .mission-context { top: calc(var(--navigation-bottom, 184px) + 8px); left: 16px; width: min(220px, calc(100% - 32px)); }
   #mission-hint { line-height: 1.3; }
   .run-time { top: auto; bottom: 116px; right: 16px; padding: 8px; gap: 5px; }
   .run-time > span { font-size: 12px; }
@@ -462,7 +467,7 @@ h1 { font-family: Georgia, "Times New Roman", serif; font-weight: 400; font-size
   .driving-console { left: 16px; bottom: 116px; max-width: calc(100% - 128px); gap: 10px; padding: 12px 10px; }
   .boost-readout { width: 66px; }
   .delivery-queue { display: none; }
-  .toast { padding: 10px 12px; }
+  .toast, .toast.visible { left: 16px; max-width: min(220px, calc(100% - 32px)); padding: 10px 12px; }
 }
 /* The globe owns the flexible space, rather than a fixed gap above an early CTA. */
 @media (max-width: 760px) and (orientation: portrait) {
@@ -488,7 +493,7 @@ h1 { font-family: Georgia, "Times New Roman", serif; font-weight: 400; font-size
   /* Keep the driving center open, including the van's airborne silhouette. */
   .navigation-hud { top: 68px; grid-template-columns: minmax(0, 1fr) 40px minmax(0, 1fr); padding: 3px 10px; gap: 2px 8px; }
   .navigation-hud .direction-disc { width: 40px; height: 40px; }
-  .navigation-hud #mission-hint { line-height: 1.3; }
+  #mission-hint { line-height: 1.3; }
   .navigation-hud .delivery-meter { position: absolute; bottom: 0; left: 10px; width: calc(100% - 20px); height: 3px; }
   .toast, .toast.visible { top: auto; bottom: max(94px, calc(env(safe-area-inset-bottom) + 94px)); left: 16px; transform: none; width: 260px; max-width: 30%; padding: 8px 10px; gap: 8px; line-height: 1.35; }
   .toast > span { display: none; }
