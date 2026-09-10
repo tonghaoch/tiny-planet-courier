@@ -20,8 +20,8 @@ export interface Collider {
 }
 
 export function spherical(lat: number, lon: number): Vector3 {
-  const a = lat * Math.PI / 180;
-  const b = lon * Math.PI / 180;
+  const a = (lat * Math.PI) / 180;
+  const b = (lon * Math.PI) / 180;
   return new Vector3(Math.cos(a) * Math.sin(b), Math.sin(a), Math.cos(a) * Math.cos(b));
 }
 
@@ -55,9 +55,9 @@ export function headingTo(normal: Vector3, forward: Vector3, target: Vector3): n
 export function seededRandom(seed: number): () => number {
   return () => {
     seed |= 0;
-    seed = seed + 0x6D2B79F5 | 0;
-    let n = Math.imul(seed ^ seed >>> 15, 1 | seed);
-    n = n + Math.imul(n ^ n >>> 7, 61 | n) ^ n;
-    return ((n ^ n >>> 14) >>> 0) / 4294967296;
+    seed = (seed + 0x6d2b79f5) | 0;
+    let n = Math.imul(seed ^ (seed >>> 15), 1 | seed);
+    n = (n + Math.imul(n ^ (n >>> 7), 61 | n)) ^ n;
+    return ((n ^ (n >>> 14)) >>> 0) / 4294967296;
   };
 }

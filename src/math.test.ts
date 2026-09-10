@@ -23,7 +23,7 @@ describe('spherical movement', () => {
   it('completes a great circle without accumulating drift', () => {
     const normal = spherical(0, 0);
     const forward = new Vector3(1, 0, 0);
-    for (let i = 0; i < 1000; i++) advanceOnSphere(normal, forward, 2 * Math.PI * PLANET_RADIUS / 1000);
+    for (let i = 0; i < 1000; i++) advanceOnSphere(normal, forward, (2 * Math.PI * PLANET_RADIUS) / 1000);
     expect(normal.distanceTo(spherical(0, 0))).toBeLessThan(1e-10);
   });
 

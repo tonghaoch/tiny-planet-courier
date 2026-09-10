@@ -1,19 +1,29 @@
+import type { PlanetTestTourLeg, PlanetTestTourRoutes } from '../../src/dev/test-bridge-types';
+import { tourSnapshot, setPlanetControls, dockAtTarget, dockAtStop, tourRoutes } from '../helpers/planet-test';
 import { expect, test, type Page } from '@playwright/test';
 import { Vector3 } from 'three';
 import { surfaceDistance } from '../../src/math';
 import { createTourPilot } from '../helpers/tour-pilot';
 
 const key = 'tiny-planet-courier:tour:best:v1';
-const legacyKeys = ['tiny-planet-courier:best:v1', 'tiny-planet-courier:bay-leap:best:v1', 'tiny-planet-courier:station:best:v1', 'tiny-planet-courier:garden:best:v1'];
-const snapshot = (page: Page) => page.evaluate(() => (window as any).__planetTest.snapshot());
+const legacyKeys = [
+  'tiny-planet-courier:best:v1',
+  'tiny-planet-courier:bay-leap:best:v1',
+  'tiny-planet-courier:station:best:v1',
+  'tiny-planet-courier:garden:best:v1',
+];
+const snapshot = (page: Page) => tourSnapshot(page);
 const vector = (value: number[]) => new Vector3().fromArray(value);
-const controls = (page: Page, value: { throttle: number; steer: number; boost: boolean } | null) => page.evaluate(value => (window as any).__planetTest.setControls(value), value);
-const fixtures = (page: Page) => page.evaluate(() => (window as any).__planetTest.routes());
+const controls = (page: Page, value: { throttle: number; steer: number; boost: boolean } | null) =>
+  setPlanetControls(page, value);
+const fixtures = (page: Page) => tourRoutes(page);
 
 async function loadTour(page: Page) {
   const errors: string[] = [];
   page.on('pageerror', error => errors.push(error.message));
-  page.on('console', message => { if (message.type() === 'error') errors.push(message.text()); });
+  page.on('console', message => {
+    if (message.type() === 'error') errors.push(message.text());
+  });
   await page.goto('/?prototype=tour&test=1');
   await expect(page.locator('#app')).toHaveAttribute('data-ready', 'true');
   await expect(page.locator('#app')).toHaveAttribute('data-prototype', 'tour');
@@ -24,8 +34,12 @@ async function loadTour(page: Page) {
 }
 
 /** The continuity proof only supplies real controller inputs. Never call dockAtTarget here. */
-async function driveLeg(page: Page, leg: any, variant: 'wide' | 'short', untilEntry = false) {
-  const pilot = createTourPilot(leg[variant].map(vector), vector(leg.destination), leg.index === 0 && variant === 'short');
+async function driveLeg(page: Page, leg: PlanetTestTourLeg, variant: 'wide' | 'short', untilEntry = false) {
+  const pilot = createTourPilot(
+    leg[variant].map(vector),
+    vector(leg.destination),
+    leg.index === 0 && variant === 'short',
+  );
   const deadline = Date.now() + 85000;
   let previous = await snapshot(page);
   let reversed = false;
@@ -45,9 +59,9 @@ async function driveLeg(page: Page, leg: any, variant: 'wide' | 'short', untilEn
       await controls(page, null);
       expect(state.index).toBe(leg.index + 1);
       expect(state.cargoCount).toBe(2 - leg.index);
-      expect(state.tour.handoffs.map((h: any) => h.index)).toEqual(Array.from({ length: leg.index + 1 }, (_, i) => i));
-      expect(state.tour.handoffs.at(-1).remaining).toBe(2 - leg.index);
-      const handoff = state.tour.handoffs.at(-1);
+      expect(state.tour.handoffs.map(h => h.index)).toEqual(Array.from({ length: leg.index + 1 }, (_, i) => i));
+      expect(state.tour.handoffs.at(-1)!.remaining).toBe(2 - leg.index);
+      const handoff = state.tour.handoffs.at(-1)!;
       expect(vector(handoff.forward).dot(vector(previous.forward))).toBeGreaterThan(0.95);
       expect(vector(state.forward).dot(vector(handoff.forward))).toBeGreaterThan(0.95);
       expect(Math.abs(state.speed - handoff.speed)).toBeLessThan(0.5);
@@ -68,7 +82,7 @@ async function driveLeg(page: Page, leg: any, variant: 'wide' | 'short', untilEn
   throw new Error(`Tour ${variant}, leg ${leg.index} timed out: ${JSON.stringify(await snapshot(page))}`);
 }
 
-async function driveClosing(page: Page, data: any) {
+async function driveClosing(page: Page, data: PlanetTestTourRoutes) {
   const pilot = createTourPilot(data.closing.map(vector), vector(data.spawn), false);
   const finished = await snapshot(page);
   const deadline = Date.now() + 65000;
@@ -96,8 +110,12 @@ for (const variant of ['wide', 'short'] as const) {
     await page.addInitScript(keys => keys.forEach((key, i) => localStorage.setItem(key, String(60 + i))), legacyKeys);
     const errors = await loadTour(page);
     const data = await fixtures(page);
-    expect(data.legs.map((leg: any) => leg.stopId)).toEqual(['bay', 'station', 'garden']);
-    expect(data.connectors.map((connector: any) => [connector.from, connector.to])).toEqual([[0, 1], [1, 2], [2, 0]]);
+    expect(data.legs.map(leg => leg.stopId)).toEqual(['bay', 'station', 'garden']);
+    expect(data.connectors.map(connector => [connector.from, connector.to])).toEqual([
+      [0, 1],
+      [1, 2],
+      [2, 0],
+    ]);
     await page.getByRole('button', { name: 'Start delivering' }).click();
     const initial = await snapshot(page);
     expect(initial.cargoCount).toBe(3);
@@ -106,7 +124,7 @@ for (const variant of ['wide', 'short'] as const) {
     let previousTotal = 0;
     for (const leg of data.legs) {
       const state = await driveLeg(page, leg, variant);
-      const split = state.tour.splits.at(-1);
+      const split = state.tour.splits.at(-1)!;
       expect(split.elapsed).toBeGreaterThan(0);
       expect(split.cumulative).toBeCloseTo(previousTotal + split.elapsed, 9);
       previousTotal = split.cumulative;
@@ -118,10 +136,12 @@ for (const variant of ['wide', 'short'] as const) {
       if (leg.index < 2) {
         await expect(page.locator('#tour-result')).toBeHidden();
         await expect(page.locator('#bay-result')).toBeHidden();
-        await expect(page.locator('#mission-name')).toHaveText(leg.index === 0 ? 'Stargaze Station' : 'Windmill Garden');
+        await expect(page.locator('#mission-name')).toHaveText(
+          leg.index === 0 ? 'Stargaze Station' : 'Windmill Garden',
+        );
         await expect(page.locator('#mission-hint')).toContainText(/connecting road|reverse and turn/i);
         expect(state.tour.navigationPhase).toBe('transfer');
-        expect(state.tour.routeCache.index).toBe(leg.index + 1);
+        expect(state.tour.routeCache!.index).toBe(leg.index + 1);
         expect(await page.evaluate(key => localStorage.getItem(key), key)).toBeNull();
       }
       await page.screenshot({ path: `artifacts/tour-${variant}-${leg.stopId}-handoff.png` });
@@ -129,22 +149,30 @@ for (const variant of ['wide', 'short'] as const) {
     const finished = await snapshot(page);
     expect(finished.finished).toBe(true);
     expect(finished.tour.entryVisited).toEqual([true, true, true]);
-    expect(finished.tour.splits.reduce((sum: number, split: any) => sum + split.elapsed, 0)).toBeCloseTo(finished.elapsed, 9);
-    expect(finished.tour.splits.at(-1).cumulative).toBe(finished.elapsed);
+    expect(finished.tour.splits.reduce((sum: number, split) => sum + split.elapsed, 0)).toBeCloseTo(
+      finished.elapsed,
+      9,
+    );
+    expect(finished.tour.splits.at(-1)!.cumulative).toBe(finished.elapsed);
     expect(finished.jumps).toBe(variant === 'short' ? 1 : 0);
     expect(finished.recoveries).toBe(0);
-    expect(finished.tour.handoffs.map((h: any) => h.remaining)).toEqual([2, 1, 0]);
+    expect(finished.tour.handoffs.map(h => h.remaining)).toEqual([2, 1, 0]);
     await expect(page.locator('#tour-result')).toBeVisible();
     await expect(page.locator('#tour-splits li')).toHaveCount(3);
-    await expect.poll(async () => (await snapshot(page)).tour.reactions.map((r: any) => r.progress)).toEqual([1, 1, 1]);
+    await expect.poll(async () => (await snapshot(page)).tour.reactions.map(r => r.progress)).toEqual([1, 1, 1]);
     const reacted = await snapshot(page);
-    expect(reacted.tour.reactions.every((r: any) => r.recipientVisible && r.parcelVisible)).toBe(true);
+    expect(reacted.tour.reactions.every(r => r.recipientVisible && r.parcelVisible)).toBe(true);
     expect(reacted.tour.reactions[0].doorOpen).toBe(1);
     expect(reacted.tour.reactions[1].telescopeTurn).toBeCloseTo(0.75);
     expect(reacted.tour.reactions[2].flowersBloomed).toBe(true);
     await page.screenshot({ path: `artifacts/tour-${variant}-finished.png` });
     expect(Number(await page.evaluate(key => localStorage.getItem(key), key))).toBe(finished.elapsed);
-    expect(await page.evaluate(keys => keys.map(key => localStorage.getItem(key)), legacyKeys)).toEqual(['60', '61', '62', '63']);
+    expect(await page.evaluate(keys => keys.map(key => localStorage.getItem(key)), legacyKeys)).toEqual([
+      '60',
+      '61',
+      '62',
+      '63',
+    ]);
     await driveClosing(page, data);
     await expect(page.locator('#tour-result')).toBeVisible();
     expect((await snapshot(page)).tour.handoffs).toHaveLength(3);
@@ -155,14 +183,16 @@ for (const variant of ['wide', 'short'] as const) {
     expect(restart.cargoCount).toBe(3);
     expect(restart.tour.splits).toEqual([]);
     expect(restart.tour.handoffs).toEqual([]);
-    expect(restart.tour.reactions.map((r: any) => r.progress)).toEqual([0, 0, 0]);
+    expect(restart.tour.reactions.map(r => r.progress)).toEqual([0, 0, 0]);
     expect(restart.tour.sceneObjects).toBe(initial.tour.sceneObjects);
     await expect(page.locator('#tour-result')).toBeHidden();
     expect(errors).toEqual([]);
   });
 }
 
-test('earned Tour recovery, pause/blur and early restart preserve or abandon only the intended state', async ({ page }) => {
+test('earned Tour recovery, pause/blur and early restart preserve or abandon only the intended state', async ({
+  page,
+}) => {
   test.setTimeout(120000);
   const errors = await loadTour(page);
   await page.getByRole('button', { name: 'Start delivering' }).click();
@@ -177,7 +207,7 @@ test('earned Tour recovery, pause/blur and early restart preserve or abandon onl
   expect(state.cargoCount).toBe(3);
 
   // An out-of-order UI fixture must not deliver, earn a future checkpoint, or write a record.
-  await page.evaluate(() => (window as any).__planetTest.dockAtStop(2));
+  await dockAtStop(page, 2);
   await page.waitForTimeout(800);
   state = await snapshot(page);
   expect(state.index).toBe(0);
@@ -185,12 +215,12 @@ test('earned Tour recovery, pause/blur and early restart preserve or abandon onl
   expect(state.tour.splits).toEqual([]);
   expect(state.tour.entryVisited).toEqual([true, false, false]);
   expect(state.tour.checkpoint.stopId).toBe('bay');
-  expect(state.tour.reactions.map((r: any) => r.progress)).toEqual([0, 0, 0]);
+  expect(state.tour.reactions.map(r => r.progress)).toEqual([0, 0, 0]);
   await page.keyboard.press('KeyR');
   expect(surfaceDistance(vector((await snapshot(page)).normal), vector(data.spawn))).toBeLessThan(0.01);
 
   // Explicit UI fixture only. The two tests above prove route continuity without this helper.
-  await page.evaluate(() => (window as any).__planetTest.dockAtTarget());
+  await dockAtTarget(page);
   await expect.poll(async () => (await snapshot(page)).index).toBe(1);
   const delivered = await snapshot(page);
   expect(delivered.tour.entryVisited).toEqual([true, false, false]);
@@ -225,7 +255,7 @@ test('earned Tour recovery, pause/blur and early restart preserve or abandon onl
   await expect(page.getByRole('button', { name: 'Resume journey' })).toBeFocused();
   await page.getByRole('button', { name: 'Resume journey' }).click();
   await expect(page.locator('#stage canvas')).toBeFocused();
-  await page.evaluate(() => (window as any).__planetTest.dockAtTarget());
+  await dockAtTarget(page);
   await expect.poll(async () => (await snapshot(page)).index).toBe(2);
   await page.keyboard.press('Escape');
   const pausedHandoff = await snapshot(page);
@@ -239,7 +269,7 @@ test('earned Tour recovery, pause/blur and early restart preserve or abandon onl
   expect(state.cargoCount).toBe(3);
   expect(state.tour.splits).toEqual([]);
   expect(state.tour.entryVisited).toEqual([true, false, false]);
-  expect(state.tour.reactions.map((r: any) => r.progress)).toEqual([0, 0, 0]);
+  expect(state.tour.reactions.map(r => r.progress)).toEqual([0, 0, 0]);
   expect(state.tour.checkpoint).toMatchObject({ stopId: 'bay', kind: 'entry' });
   await expect(page.locator('#tour-result')).toBeHidden();
   expect(await page.evaluate(key => localStorage.getItem(key), key)).toBeNull();
@@ -254,45 +284,60 @@ test('earned Tour recovery, pause/blur and early restart preserve or abandon onl
   expect(errors).toEqual([]);
 });
 
-test('320px Tour completion keeps touch driving, recipient, focus and restart usable with reduced motion', async ({ browser }) => {
+test('320px Tour completion keeps touch driving, recipient, focus and restart usable with reduced motion', async ({
+  browser,
+}) => {
   test.setTimeout(45000);
-  const context = await browser.newContext({ baseURL: 'http://127.0.0.1:5173', viewport: { width: 320, height: 640 }, hasTouch: true, reducedMotion: 'reduce' });
+  const context = await browser.newContext({
+    baseURL: 'http://127.0.0.1:5173',
+    viewport: { width: 320, height: 640 },
+    hasTouch: true,
+    reducedMotion: 'reduce',
+  });
   const page = await context.newPage();
   try {
     await page.addInitScript(() => {
-      Storage.prototype.getItem = () => { throw new Error('storage unavailable'); };
-      Storage.prototype.setItem = () => { throw new Error('storage unavailable'); };
+      Storage.prototype.getItem = () => {
+        throw new Error('storage unavailable');
+      };
+      Storage.prototype.setItem = () => {
+        throw new Error('storage unavailable');
+      };
     });
     const errors = await loadTour(page);
     await page.getByRole('button', { name: 'Start delivering' }).tap();
     const cdp = await context.newCDPSession(page);
     const gas = await page.getByRole('button', { name: 'Drive forward', exact: true }).boundingBox();
     const right = await page.getByRole('button', { name: 'Turn right', exact: true }).boundingBox();
-    const touch = async (turn: boolean) => cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [
-      { x: gas!.x + gas!.width / 2, y: gas!.y + gas!.height / 2, id: 0 },
-      ...(turn ? [{ x: right!.x + right!.width / 2, y: right!.y + right!.height / 2, id: 1 }] : []),
-    ] });
+    const touch = async (turn: boolean) =>
+      cdp.send('Input.dispatchTouchEvent', {
+        type: 'touchStart',
+        touchPoints: [
+          { x: gas!.x + gas!.width / 2, y: gas!.y + gas!.height / 2, id: 0 },
+          ...(turn ? [{ x: right!.x + right!.width / 2, y: right!.y + right!.height / 2, id: 1 }] : []),
+        ],
+      });
     await touch(true);
     await page.waitForTimeout(350);
     expect((await snapshot(page)).speed).toBeGreaterThan(0.5);
     await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
     // UI-only fixtures, deliberately separate from continuous route acceptance.
     for (let i = 0; i < 3; i++) {
-      await page.evaluate(() => (window as any).__planetTest.dockAtTarget());
+      await dockAtTarget(page);
       await expect.poll(async () => (await snapshot(page)).index).toBe(i + 1);
       expect((await snapshot(page)).cargoCount).toBe(2 - i);
       if (i < 2) await expect(page.locator('#tour-result')).toBeHidden();
     }
     await expect(page.locator('#tour-result')).toBeVisible();
     await expect(page.getByRole('dialog')).toBeHidden();
-    await expect.poll(async () => (await snapshot(page)).tour.reactions.map((r: any) => r.progress)).toEqual([1, 1, 1]);
+    await expect.poll(async () => (await snapshot(page)).tour.reactions.map(r => r.progress)).toEqual([1, 1, 1]);
     await page.waitForTimeout(1000);
     const card = await page.locator('#tour-result').boundingBox();
     const pedals = await page.locator('.touch-controls').boundingBox();
     expect(card!.x).toBeGreaterThanOrEqual(0);
     expect(card!.x + card!.width).toBeLessThanOrEqual(320);
     expect(card!.y + card!.height).toBeLessThan(pedals!.y);
-    const recipient = (await snapshot(page)).tour.recipientScreens[2];
+    const recipient = (await snapshot(page)).tour.recipientScreens[2]!;
     expect(recipient.visible).toBe(true);
     expect(recipient.left).toBeGreaterThanOrEqual(0);
     expect(recipient.right).toBeLessThanOrEqual(320);
@@ -319,7 +364,9 @@ test('320px Tour completion keeps touch driving, recipient, focus and restart us
     const retry = await snapshot(page);
     expect(retry.cargoCount).toBe(3);
     expect(retry.tour.splits).toEqual([]);
-    expect(retry.tour.reactions.map((r: any) => r.progress)).toEqual([0, 0, 0]);
+    expect(retry.tour.reactions.map(r => r.progress)).toEqual([0, 0, 0]);
     expect(errors).toEqual([]);
-  } finally { await context.close(); }
+  } finally {
+    await context.close();
+  }
 });

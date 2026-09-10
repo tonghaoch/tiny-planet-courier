@@ -3,7 +3,11 @@ import { describe, expect, it } from 'vitest';
 import { Vehicle } from './vehicle';
 import { TourLayout } from './tour-layout';
 
-const countObjects = (scene: Scene) => { let count = 0; scene.traverse(() => count++); return count; };
+const countObjects = (scene: Scene) => {
+  let count = 0;
+  scene.traverse(() => count++);
+  return count;
+};
 
 describe('compatible rack cargo presentation', () => {
   it('retains the original single-parcel position and visibility API', () => {
@@ -33,14 +37,24 @@ describe('compatible rack cargo presentation', () => {
     const positions = vehicle.getCargoWorldPositions();
     expect(positions).toHaveLength(3);
     expect(new Set(positions.map(p => p.toArray().join(','))).size).toBe(3);
-    const state = { normal: vehicle.normal.clone(), forward: vehicle.forward.clone(), speed: vehicle.speed, charge: vehicle.charge };
+    const state = {
+      normal: vehicle.normal.clone(),
+      forward: vehicle.forward.clone(),
+      speed: vehicle.speed,
+      charge: vehicle.charge,
+    };
     for (let i = 0; i < 3; i++) {
       expect(vehicle.getParcelWorldPosition()).toEqual(positions[i]);
       expect(vehicle.consumeParcel()).toEqual(positions[i]);
       expect(vehicle.cargoCount).toBe(2 - i);
       expect(vehicle.cargoVisible).toBe(i < 2);
       expect(vehicle.getCargoWorldPositions()).toEqual(positions.slice(i + 1));
-      expect({ normal: vehicle.normal, forward: vehicle.forward, speed: vehicle.speed, charge: vehicle.charge }).toEqual(state);
+      expect({
+        normal: vehicle.normal,
+        forward: vehicle.forward,
+        speed: vehicle.speed,
+        charge: vehicle.charge,
+      }).toEqual(state);
     }
     expect(vehicle.consumeParcel()).toBeNull();
   });

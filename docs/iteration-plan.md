@@ -1,5 +1,30 @@
 # Tiny Planet Courier — iteration plan and handoff
 
+## Engineering release checkpoint — 2026-09-10
+
+**Local validation was recorded on `chore/engineering-structure` from baseline `590c329`.** At that time, the changes were uncommitted and unpublished; no commit, push, merge or deployment had been performed for this iteration. On 2026-09-10, the owner subsequently tried the production preview, accepted it, and explicitly authorized committing and pushing the verified engineering changes directly to `main`. The coordinator will commit on `chore/engineering-structure`, fast-forward `main` and push without force, then verify exact-SHA Pages Actions. The exact pushed SHA and deployment outcome still require coordinator verification; authorization is not publication confirmation.
+
+The [architecture and development checks](architecture.md) document the bounded CameraRig/DEV bridge, World/scenery/reaction and UI helper extractions, unchanged public paths, split TypeScript checks, shared PR/release `verify`, and fixed bundle budgets. The game remains vanilla TypeScript/Three/Vite; driving, routes, HUD and delivery rules are preserved. New CI/workflow changes **had not run remotely when local validation was recorded**.
+
+**Coordinator-verified results, not tests run by the documentation worker:**
+
+| Check | Final observed result |
+| --- | --- |
+| Static checks | Format, lint and all-project types passed; additional `noUnusedLocals`/`noUnusedParameters` checks passed. |
+| Unit and audit tests | **367 Vitest tests in 27 files** passed; separately, **11 Node bundle tests** passed. |
+| Production build / budget audit | Passed without the 500kB chunk warning. Total **686,679 raw / 181,714 gzip(level 9) bytes**, **+0.346% / +1.084%** against the original; cache boundaries, not a cold-byte or measured startup-speed reduction. |
+| Full DEV browser invocation | **90/90 passed in one invocation, 9.4 minutes.** |
+| Subsequent production build + preview | **15/15 passed in 33.1s**, sequentially after DEV. Neither browser suite used retries or skipped cases. |
+| Frozen-run integrity | SHA256 confirmed all **99 tracked/pending project files** unchanged throughout the final 90+15 run. |
+
+Real-input wide/short complete Tours and closing road, independent routes, keyboard/touch, recovery and HUD were covered; teleport fixtures prove UI/state only. Separate coordinator comparisons found five UI shells byte-identical, **691,500 hint / 11,525 label** comparisons equal, **48 world/collider/reaction states** matching pre-extraction, and no cycles in **34 type-erased static runtime modules**. The memory-only business perturbation changed the app hash without changing engine chunk hashes/bytes; engine chunks contain no app modules. Production has no rendered DEV bridge modules/markers, a valid acyclic manifest graph and the unchanged Pages base. Safari/WebKit and a new live deployed run were **not tested**. Evidence remains ignored under `artifacts/engineering-validation/`, not documentation assets.
+
+**Brief verification history:** the initial full run was **89/90**: compact reduced-motion startup sampled a **14.445px** vehicle projection before the existing **>15px** assertion was ready. The unchanged test also failed against original `590c329` source (1/3; current 3/12). Only a seven-line test readiness wait (≤1s; visible, width >10, height >15) was added before the original toast/gap/bounds/no-overlap assertions; no thresholds were relaxed and no app change was made. Targeted follow-ups passed 20/20 current and 8/8 baseline before final acceptance.
+
+An intermediate **88/90** rerun encountered two unsolicited whole-document reloads/bridge loss while parallel read-only review/worktree activity existed. Traces confirmed second document requests, **not their precise trigger**. The exclusive frozen final run passed without further code changes. Keep DEV sessions exclusive: no source changes, builds or worktree creation/deletion; even read-only analysis using temporary worktrees can create filesystem events. This is an environment-isolation limitation, **not a permanent fix for all Windows flakiness**. Run `npm run verify`, `npm run test:browser`, then `npm run test:preview` sequentially.
+
+---
+
 <a id="current-checkpoint-and-cross-computer-handoff--2026-09-08"></a>
 
 ## Current checkpoint and cross-computer handoff — 2026-09-09

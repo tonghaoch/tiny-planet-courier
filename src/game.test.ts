@@ -2,7 +2,14 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { DeliveryRun, formatTime, readBest, saveBest } from './game';
 import { spherical, type Destination } from './math';
 
-const targets: Destination[] = [0, 35, 90].map((lon, i) => ({ id: String(i), name: 'Station', label: 'STATION', parcel: 'Package', normal: spherical(0, lon), color: 0xffffff }));
+const targets: Destination[] = [0, 35, 90].map((lon, i) => ({
+  id: String(i),
+  name: 'Station',
+  label: 'STATION',
+  parcel: 'Package',
+  normal: spherical(0, lon),
+  color: 0xffffff,
+}));
 const wait = (run: DeliveryRun, seconds = 0.7, speed = 0, altitude = 0) => {
   const target = run.target!.normal.clone();
   let result = null;
@@ -83,14 +90,26 @@ describe('local record and time presentation', () => {
   });
 
   it('gracefully tolerates unavailable browser storage', () => {
-    vi.stubGlobal('localStorage', { getItem() { throw new Error('blocked'); }, setItem() { throw new Error('blocked'); } });
+    vi.stubGlobal('localStorage', {
+      getItem() {
+        throw new Error('blocked');
+      },
+      setItem() {
+        throw new Error('blocked');
+      },
+    });
     expect(readBest()).toBeNull();
     expect(saveBest(24)).toBe(false);
   });
 
   it('only saves a valid improved record', () => {
     let record: string | null = null;
-    vi.stubGlobal('localStorage', { getItem: () => record, setItem: (_key: string, value: string) => { record = value; } });
+    vi.stubGlobal('localStorage', {
+      getItem: () => record,
+      setItem: (_key: string, value: string) => {
+        record = value;
+      },
+    });
     expect(saveBest(30)).toBe(true);
     expect(saveBest(40)).toBe(false);
     expect(saveBest(20)).toBe(true);

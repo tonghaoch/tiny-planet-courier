@@ -8,7 +8,7 @@ const neutral = { throttle: 0, steer: 0, boost: false };
 const throttle = { ...neutral, throttle: 1 };
 const boosted = { ...throttle, boost: true };
 const origin = spherical(30, 12);
-const east = new Vector3(Math.cos(12 * Math.PI / 180), 0, -Math.sin(12 * Math.PI / 180));
+const east = new Vector3(Math.cos((12 * Math.PI) / 180), 0, -Math.sin((12 * Math.PI) / 180));
 const north = new Vector3().crossVectors(origin, east).normalize();
 const LIP = -2.7;
 const BASE = -4.9;
@@ -30,7 +30,13 @@ class FakeBay implements BayEnvironment {
       if (!withRamp) return { kind: 'road', radius: T.baselineRadius };
       if (x >= BASE && x <= LIP && Math.abs(y) <= 0.9) {
         const t = (x - BASE) / (LIP - BASE);
-        return { kind: 'ramp', radius: T.baselineRadius + 0.65 * t * t, rampProgress: t, rampSlope: 1.3 * t / 2.2, rampForward: tangent(east, normal) };
+        return {
+          kind: 'ramp',
+          radius: T.baselineRadius + 0.65 * t * t,
+          rampProgress: t,
+          rampSlope: (1.3 * t) / 2.2,
+          rampForward: tangent(east, normal),
+        };
       }
       if (x > -2.3 && x < 2.3 && Math.abs(y) < 2) return { kind: 'water', radius: WATER_RADIUS };
       return { kind: 'ground', radius: PLANET_RADIUS + 0.075 };
@@ -41,7 +47,10 @@ class FakeBay implements BayEnvironment {
     const normal = origin.clone();
     const direction = east.clone().multiplyScalar(x).addScaledVector(north, y);
     if (direction.lengthSq() > 0) advanceOnSphere(normal, direction.normalize(), Math.hypot(x, y));
-    return { normal, forward: tangent(east.clone().multiplyScalar(Math.cos(angle)).addScaledVector(north, Math.sin(angle)), normal) };
+    return {
+      normal,
+      forward: tangent(east.clone().multiplyScalar(Math.cos(angle)).addScaledVector(north, Math.sin(angle)), normal),
+    };
   }
 
   xy(normal: Vector3): { x: number; y: number } {
@@ -49,7 +58,7 @@ class FakeBay implements BayEnvironment {
     const direction = normal.clone().addScaledVector(origin, -cosine);
     const length = direction.length();
     if (length < 1e-12) return { x: 0, y: 0 };
-    const scale = Math.atan2(length, cosine) * PLANET_RADIUS / length;
+    const scale = (Math.atan2(length, cosine) * PLANET_RADIUS) / length;
     return { x: direction.dot(east) * scale, y: direction.dot(north) * scale };
   }
 
@@ -63,7 +72,7 @@ class FakeBay implements BayEnvironment {
     if (!this.withRamp) return null;
     const p = this.xy(previous);
     const n = this.xy(next);
-    if ((p.x < LIP) === (n.x < LIP) || p.x === n.x) return null;
+    if (p.x < LIP === n.x < LIP || p.x === n.x) return null;
     const fraction = (LIP - p.x) / (n.x - p.x);
     if (Math.abs(p.y + (n.y - p.y) * fraction) > 0.9) return null;
     const normal = previous.clone().lerp(next, fraction).normalize();
@@ -85,7 +94,8 @@ function place(drive: BayDrive, environment: FakeBay, x: number, speed: number, 
 
 function simulate(drive: BayDrive, seconds: number, controls = neutral, dt = T.step): BayDriveEvent[] {
   const events: BayDriveEvent[] = [];
-  for (let elapsed = 0; elapsed < seconds - 1e-10; elapsed += dt) events.push(...drive.update(Math.min(dt, seconds - elapsed), controls));
+  for (let elapsed = 0; elapsed < seconds - 1e-10; elapsed += dt)
+    events.push(...drive.update(Math.min(dt, seconds - elapsed), controls));
   return events;
 }
 
@@ -119,10 +129,22 @@ function airborne(environment = new FakeBay(), height = 2, radialSpeed = 0, spee
 
 function snapshot(drive: BayDrive) {
   return {
-    normal: drive.normal.toArray(), forward: drive.forward.toArray(), speed: drive.speed, charge: drive.charge,
-    contactRadius: drive.contactRadius, radialSpeed: drive.radialSpeed, altitude: drive.altitude,
-    boosting: drive.boosting, phase: drive.phase, steer: drive.steer, acceleration: drive.acceleration,
-    groundPitch: drive.groundPitch, impact: drive.impact, recoveries: drive.recoveries, jumps: drive.jumps, landings: drive.landings,
+    normal: drive.normal.toArray(),
+    forward: drive.forward.toArray(),
+    speed: drive.speed,
+    charge: drive.charge,
+    contactRadius: drive.contactRadius,
+    radialSpeed: drive.radialSpeed,
+    altitude: drive.altitude,
+    boosting: drive.boosting,
+    phase: drive.phase,
+    steer: drive.steer,
+    acceleration: drive.acceleration,
+    groundPitch: drive.groundPitch,
+    impact: drive.impact,
+    recoveries: drive.recoveries,
+    jumps: drive.jumps,
+    landings: drive.landings,
   };
 }
 
@@ -130,7 +152,11 @@ function expectAligned(drive: BayDrive) {
   expect(drive.normal.length()).toBeCloseTo(1, 10);
   expect(drive.forward.length()).toBeCloseTo(1, 10);
   expect(drive.normal.dot(drive.forward)).toBeCloseTo(0, 10);
-  expect([...drive.normal.toArray(), ...drive.forward.toArray(), drive.speed, drive.contactRadius, drive.radialSpeed].every(Number.isFinite)).toBe(true);
+  expect(
+    [...drive.normal.toArray(), ...drive.forward.toArray(), drive.speed, drive.contactRadius, drive.radialSpeed].every(
+      Number.isFinite,
+    ),
+  ).toBe(true);
 }
 
 describe('BayDrive ground controls', () => {
@@ -243,7 +269,10 @@ describe('BayDrive swept launch and support', () => {
     const flightTime = dt - 0.02 / speedAtLip;
     expect(drive.speed).toBeCloseTo(speedAtLip * Math.cos(PITCH), 10);
     expect(drive.radialSpeed).toBeCloseTo(speedAtLip * Math.sin(PITCH) - T.gravity * flightTime, 6);
-    expect(drive.contactRadius).toBeCloseTo(T.baselineRadius + 0.65 + speedAtLip * Math.sin(PITCH) * flightTime - 0.5 * T.gravity * flightTime ** 2, 6);
+    expect(drive.contactRadius).toBeCloseTo(
+      T.baselineRadius + 0.65 + speedAtLip * Math.sin(PITCH) * flightTime - 0.5 * T.gravity * flightTime ** 2,
+      6,
+    );
   });
 
   it('launches with boost already held instead of requiring a fresh key press', () => {
@@ -260,7 +289,7 @@ describe('BayDrive swept launch and support', () => {
   it.each([
     { name: 'reverse across the lip', x: LIP + 0.025, speed: -7, angle: 0 },
     { name: 'backwards-facing travel toward the bay', x: LIP - 0.025, speed: -7, angle: Math.PI },
-    { name: 'mostly sideways', x: LIP - 0.025, speed: 7, angle: 75 * Math.PI / 180 },
+    { name: 'mostly sideways', x: LIP - 0.025, speed: 7, angle: (75 * Math.PI) / 180 },
   ])('rejects $name even with a permissive lip callback', ({ x, speed, angle }) => {
     const environment = new FakeBay(true);
     const drive = new BayDrive(environment);
@@ -412,7 +441,10 @@ describe('BayDrive ballistic flight and prediction', () => {
         drive.update(T.step, { ...boosted, steer });
         const beforeMovement = drive.forward.clone();
         advanceOnSphere(drive.normal.clone(), beforeMovement, -drive.speed * T.step);
-        const angle = Math.atan2(normal.dot(new Vector3().crossVectors(forward, beforeMovement)), forward.dot(beforeMovement));
+        const angle = Math.atan2(
+          normal.dot(new Vector3().crossVectors(forward, beforeMovement)),
+          forward.dot(beforeMovement),
+        );
         totalTurn += angle;
         expect(Math.abs(angle)).toBeLessThanOrEqual(T.airSteerRate * T.step + 1e-9);
         expect(Math.abs(totalTurn)).toBeLessThanOrEqual(T.maxAirTurn + 1e-8);
@@ -530,7 +562,9 @@ describe('BayDrive water, retry, collisions, and robustness', () => {
     expect(event.strength).toBeLessThanOrEqual(1);
     expect(drive.speed).toBeLessThanOrEqual(0);
     expect(drive.speed).toBeGreaterThanOrEqual(-0.7);
-    expect(surfaceDistance(drive.normal, obstacle.normal)).toBeGreaterThanOrEqual(obstacle.radius + T.vehicleRadius - 1e-8);
+    expect(surfaceDistance(drive.normal, obstacle.normal)).toBeGreaterThanOrEqual(
+      obstacle.radius + T.vehicleRadius - 1e-8,
+    );
     const events = simulate(drive, 1, throttle).filter(item => item.type === 'collision');
     expect(events.length).toBeLessThanOrEqual(Math.ceil(1 / T.collisionCooldown));
     expectAligned(drive);

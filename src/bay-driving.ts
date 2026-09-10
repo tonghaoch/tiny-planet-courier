@@ -38,8 +38,9 @@ export const BAY_DRIVING_TUNING = Object.freeze({
 const T = BAY_DRIVING_TUNING;
 const EPSILON = 1e-9;
 const clamp = (value: number, low: number, high: number) => Math.min(high, Math.max(low, value));
-const input = (value: number) => Number.isFinite(value) ? clamp(value, -1, 1) : 0;
-const damp = (value: number, target: number, rate: number, dt: number) => target + (value - target) * Math.exp(-rate * dt);
+const input = (value: number) => (Number.isFinite(value) ? clamp(value, -1, 1) : 0);
+const damp = (value: number, target: number, rate: number, dt: number) =>
+  target + (value - target) * Math.exp(-rate * dt);
 type Controls = { throttle: number; steer: number; boost: boolean };
 
 interface FlightState {
@@ -59,7 +60,12 @@ interface Touchdown {
 }
 
 /** Mutates only the supplied motion state. Live flight and prediction share this path. */
-function advanceFlight(environment: BayEnvironment, state: FlightState, dt: number, steerInput: number): Touchdown | null {
+function advanceFlight(
+  environment: BayEnvironment,
+  state: FlightState,
+  dt: number,
+  steerInput: number,
+): Touchdown | null {
   state.steer = damp(state.steer, steerInput, T.steerResponse, dt);
   const turn = clamp(state.airTurn - state.steer * T.airSteerRate * dt, -T.maxAirTurn, T.maxAirTurn);
   state.forward.applyAxisAngle(state.normal, turn - state.airTurn);
@@ -155,7 +161,11 @@ export class BayDrive {
     const events = this.pendingEvents.splice(0);
     if (!Number.isFinite(dt) || dt <= 0) return events;
     const duration = Math.min(dt, T.maxDelta);
-    const clean: Controls = { throttle: input(controls.throttle), steer: input(controls.steer), boost: controls.boost === true };
+    const clean: Controls = {
+      throttle: input(controls.throttle),
+      steer: input(controls.steer),
+      boost: controls.boost === true,
+    };
     // Bound both time debt and support-sampling distance after a paused tab.
     const count = Math.ceil(duration / T.step);
     const step = duration / count;
@@ -180,12 +190,13 @@ export class BayDrive {
     while (elapsed < T.predictionHorizon - EPSILON) {
       const dt = Math.min(T.step, T.predictionHorizon - elapsed);
       const contact = advanceFlight(this.environment, state, dt, 0);
-      if (contact) return {
-        normal: state.normal.clone(),
-        radius: contact.surface.radius,
-        kind: contact.surface.kind,
-        time: elapsed + contact.time,
-      };
+      if (contact)
+        return {
+          normal: state.normal.clone(),
+          radius: contact.surface.radius,
+          kind: contact.surface.kind,
+          time: elapsed + contact.time,
+        };
       elapsed += dt;
     }
     return null;
@@ -219,9 +230,10 @@ export class BayDrive {
   }
 
   private setGroundPitch(surface: BaySurface): void {
-    this.groundPitch = surface.kind === 'ramp' && surface.rampSlope !== undefined
-      ? Math.atan(surface.rampSlope * this.forward.dot(tangent(surface.rampForward ?? this.forward, this.normal)))
-      : 0;
+    this.groundPitch =
+      surface.kind === 'ramp' && surface.rampSlope !== undefined
+        ? Math.atan(surface.rampSlope * this.forward.dot(tangent(surface.rampForward ?? this.forward, this.normal)))
+        : 0;
   }
 
   private startFalling(): void {
@@ -243,9 +255,13 @@ export class BayDrive {
     this.contactRadius = support.radius;
     if (support.kind !== 'ramp' || (support.rampProgress ?? 1) < 0.8) this.lipLatched = false;
 
-    const boosting = controls.boost && !this.boostExhausted && controls.throttle > 0
-      && this.speed > T.boostMinimumSpeed && this.charge > 0
-      && (this.boosting || this.charge >= T.boostStartCharge);
+    const boosting =
+      controls.boost &&
+      !this.boostExhausted &&
+      controls.throttle > 0 &&
+      this.speed > T.boostMinimumSpeed &&
+      this.charge > 0 &&
+      (this.boosting || this.charge >= T.boostStartCharge);
     if (boosting && !this.boosting) events.push(this.event('boost', 1));
     this.boosting = boosting;
     this.charge = clamp(this.charge + dt * (boosting ? -T.boostDrain : T.boostRecharge), 0, 1);
@@ -258,9 +274,15 @@ export class BayDrive {
 
     const oldSpeed = this.speed;
     if (controls.throttle * this.speed < 0) {
-      this.speed = Math.sign(this.speed) * Math.max(0, Math.abs(this.speed) - T.braking * Math.abs(controls.throttle) * dt);
+      this.speed =
+        Math.sign(this.speed) * Math.max(0, Math.abs(this.speed) - T.braking * Math.abs(controls.throttle) * dt);
     } else if (controls.throttle > 0) {
-      this.speed = damp(this.speed, controls.throttle * (boosting ? T.boostSpeed : T.cruiseSpeed), boosting ? T.boostResponse : T.driveResponse, dt);
+      this.speed = damp(
+        this.speed,
+        controls.throttle * (boosting ? T.boostSpeed : T.cruiseSpeed),
+        boosting ? T.boostResponse : T.driveResponse,
+        dt,
+      );
     } else if (controls.throttle < 0) {
       this.speed = damp(this.speed, controls.throttle * T.reverseSpeed, T.reverseResponse, dt);
     } else this.speed *= Math.exp(-T.coastDrag * dt);
@@ -283,7 +305,8 @@ export class BayDrive {
       const rampForward = tangent(crossing.forward, crossing.normal);
       const facing = tangent(lipHeading, crossing.normal);
       const movement = next.clone().sub(previous);
-      const forwardCrossing = movement.lengthSq() > 1e-16 && tangent(movement, crossing.normal).dot(rampForward) >= T.launchAlignment;
+      const forwardCrossing =
+        movement.lengthSq() > 1e-16 && tangent(movement, crossing.normal).dot(rampForward) >= T.launchAlignment;
       if (forwardCrossing && facing.dot(rampForward) >= T.launchAlignment) {
         this.normal.copy(crossing.normal);
         this.forward.copy(facing);
@@ -302,7 +325,8 @@ export class BayDrive {
     }
 
     const nextSupport = this.environment.sampleSurface(next);
-    const unsupported = (surface: BaySurface) => surface.kind === 'water' || support.radius - surface.radius > T.supportDrop;
+    const unsupported = (surface: BaySurface) =>
+      surface.kind === 'water' || support.radius - surface.radius > T.supportDrop;
     if (unsupported(nextSupport)) {
       // Locate departure separately from touchdown: starting a fall at the old
       // grounded point would immediately re-land on that same piece of ramp.
@@ -315,7 +339,10 @@ export class BayDrive {
         advanceOnSphere(point, heading.clone(), this.speed * dt * fraction);
         const sample = this.environment.sampleSurface(point);
         if (unsupported(sample)) high = fraction;
-        else { low = fraction; edgeSupport = sample; }
+        else {
+          low = fraction;
+          edgeSupport = sample;
+        }
       }
       this.normal.copy(previous);
       this.forward.copy(heading);
@@ -391,7 +418,10 @@ export class BayDrive {
       if (distance >= clearance) continue;
       const toward = tangent(collider.normal, this.normal);
       const approach = Math.max(0, this.speed * this.forward.dot(toward));
-      const away = distance < 1e-6 ? tangent(this.forward.clone().negate(), collider.normal) : tangent(this.normal, collider.normal);
+      const away =
+        distance < 1e-6
+          ? tangent(this.forward.clone().negate(), collider.normal)
+          : tangent(this.normal, collider.normal);
       const corrected = collider.normal.clone();
       advanceOnSphere(corrected, away, clearance + 1e-5);
       this.normal.copy(corrected);
@@ -402,7 +432,8 @@ export class BayDrive {
         this.collisionRemaining = T.collisionCooldown;
       }
       const support = this.environment.sampleSurface(this.normal);
-      if (support.kind !== 'water' && this.contactRadius - support.radius <= T.supportDrop) this.contactRadius = support.radius;
+      if (support.kind !== 'water' && this.contactRadius - support.radius <= T.supportDrop)
+        this.contactRadius = support.radius;
     }
   }
 }

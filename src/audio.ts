@@ -37,9 +37,14 @@ export class AudioFeedback {
         this.master.connect(this.context.destination);
       }
       if (this.context.state === 'suspended') {
-        void this.context.resume().catch(() => { this.enabled = false; this.updateMaster(); });
+        void this.context.resume().catch(() => {
+          this.enabled = false;
+          this.updateMaster();
+        });
       }
-    } catch { this.enabled = false; }
+    } catch {
+      this.enabled = false;
+    }
   }
 
   setPaused(paused: boolean) {
@@ -57,7 +62,11 @@ export class AudioFeedback {
 
   private stopTransients() {
     for (const source of this.transients) {
-      try { source.stop(); } catch { /* An already-ended source needs no further work. */ }
+      try {
+        source.stop();
+      } catch {
+        /* An already-ended source needs no further work. */
+      }
       source.disconnect();
     }
     this.transients.clear();
@@ -111,7 +120,14 @@ export class AudioFeedback {
     this.windGain.gain.setTargetAtTime(active ? (grounded ? speed * 0.004 : 0.09) : 0, time, 0.07);
   }
 
-  private tone(frequency: number, endFrequency: number, duration: number, volume: number, type: OscillatorType = 'sine', delay = 0) {
+  private tone(
+    frequency: number,
+    endFrequency: number,
+    duration: number,
+    volume: number,
+    type: OscillatorType = 'sine',
+    delay = 0,
+  ) {
     if (!this.enabled || this.paused || !this.context || !this.master) return;
     const context = this.context;
     const at = context.currentTime + delay;
@@ -126,7 +142,11 @@ export class AudioFeedback {
     source.connect(gain);
     gain.connect(this.master);
     this.transients.add(source);
-    source.onended = () => { this.transients.delete(source); source.disconnect(); gain.disconnect(); };
+    source.onended = () => {
+      this.transients.delete(source);
+      source.disconnect();
+      gain.disconnect();
+    };
     source.start(at);
     source.stop(at + duration + 0.01);
   }
@@ -142,7 +162,11 @@ export class AudioFeedback {
     source.connect(gain);
     gain.connect(this.master);
     this.transients.add(source);
-    source.onended = () => { this.transients.delete(source); source.disconnect(); gain.disconnect(); };
+    source.onended = () => {
+      this.transients.delete(source);
+      source.disconnect();
+      gain.disconnect();
+    };
     source.start();
     source.stop(context.currentTime + 0.32);
   }
@@ -155,15 +179,17 @@ export class AudioFeedback {
     else if (event.type === 'launch') this.tone(290, 520, 0.18, 0.025);
     else if (event.type === 'land') this.tone(115, 42, 0.19, 0.025 + strength * 0.045, 'triangle');
     else if (event.type === 'collision') this.tone(90, 35, 0.13, 0.025 + strength * 0.02, 'triangle');
-    else if (event.type === 'splash') { this.splashNoise(); this.tone(440, 160, 0.25, 0.025); }
-    else if (event.type === 'recovered') this.tone(440, 440, 0.15, 0.02);
+    else if (event.type === 'splash') {
+      this.splashNoise();
+      this.tone(440, 160, 0.25, 0.025);
+    } else if (event.type === 'recovered') this.tone(440, 440, 0.15, 0.02);
   }
 
   chime(complete = false) {
     if (!this.enabled) return;
     this.unlock();
     const notes = complete ? [523.25, 659.25, 783.99, 1046.5] : [659.25, 783.99, 987.77];
-    notes.forEach((note, i) => this.tone(note, note, 0.45, 0.09, 'sine', i * 0.10));
+    notes.forEach((note, i) => this.tone(note, note, 0.45, 0.09, 'sine', i * 0.1));
   }
 
   dispose() {

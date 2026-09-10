@@ -31,7 +31,10 @@ export function createBayPilot(route: Vector3[], destination: Vector3, shortcut:
     let closestDistance = Infinity;
     for (let i = Math.max(0, progress - 3); i < Math.min(route.length, progress + 32); i++) {
       const distance = surfaceDistance(state.normal, route[i]);
-      if (distance < closestDistance) { closestDistance = distance; closest = i; }
+      if (distance < closestDistance) {
+        closestDistance = distance;
+        closest = i;
+      }
     }
     progress = Math.max(progress, closest);
     let ahead = progress;

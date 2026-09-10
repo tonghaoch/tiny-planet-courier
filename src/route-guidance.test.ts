@@ -2,8 +2,8 @@ import { describe, expect, it } from 'vitest';
 import { spherical, surfaceDistance, tangent, headingTo } from './math';
 import { projectOnRoute, routeAhead, type RouteCursor } from './route-guidance';
 
-const equator = (metres: number) => spherical(0, metres / 15 * 180 / Math.PI);
-const point = (x: number, y: number) => spherical(y / 15 * 180 / Math.PI, x / 15 * 180 / Math.PI);
+const equator = (metres: number) => spherical(0, ((metres / 15) * 180) / Math.PI);
+const point = (x: number, y: number) => spherical(((y / 15) * 180) / Math.PI, ((x / 15) * 180) / Math.PI);
 
 describe('continuous spherical route guidance', () => {
   it('projects exactly onto minor arcs and advances by arc length across corners', () => {
@@ -23,7 +23,8 @@ describe('continuous spherical route guidance', () => {
     const sparse = [equator(0), equator(8)];
     const dense = Array.from({ length: 41 }, (_, i) => equator(i * 0.2));
     for (let x = 0.05; x < 7.9; x += 0.131) {
-      const a = routeAhead(point(x, 0.4), sparse), b = routeAhead(point(x, 0.4), dense);
+      const a = routeAhead(point(x, 0.4), sparse),
+        b = routeAhead(point(x, 0.4), dense);
       expect(a.progress).toBeCloseTo(b.progress, 10);
       expect(a.target.distanceTo(b.target)).toBeLessThan(1e-12);
     }
@@ -37,7 +38,9 @@ describe('continuous spherical route guidance', () => {
     for (const normal of [equator(0), equator(45), point(20, 20)]) {
       for (const route of [path, [equator(1)], [equator(1), equator(1)]]) {
         const result = routeAhead(normal, route);
-        expect([result.progress, result.distance, result.targetProgress, result.target.length()].every(Number.isFinite)).toBe(true);
+        expect(
+          [result.progress, result.distance, result.targetProgress, result.target.length()].every(Number.isFinite),
+        ).toBe(true);
         expect(result.target.length()).toBeCloseTo(1, 12);
       }
     }
@@ -63,7 +66,8 @@ describe('continuous spherical route guidance', () => {
   });
 
   it('allows continuous reverse progress, resets on path identity, and never mutates inputs', () => {
-    const path = [equator(0), equator(8)], normal = point(5, 0.1);
+    const path = [equator(0), equator(8)],
+      normal = point(5, 0.1);
     const snapshot = JSON.stringify({ path, normal });
     const initial = routeAhead(normal, path);
     const cursorSnapshot = JSON.stringify(initial.cursor);
@@ -91,6 +95,6 @@ describe('continuous spherical route guidance', () => {
       const n = point(x, 0.1);
       return headingTo(n, tangent(equator(x + 0.01), n), routeAhead(n, path).target);
     });
-    expect(Math.abs(headings[1] - headings[0]) * 180 / Math.PI).toBeLessThan(0.15);
+    expect((Math.abs(headings[1] - headings[0]) * 180) / Math.PI).toBeLessThan(0.15);
   });
 });

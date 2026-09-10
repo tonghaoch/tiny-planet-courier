@@ -7,15 +7,42 @@ export { inLevelPolygon as inBayPolygon, type LevelPoint as BayPoint } from './a
 const footprintPolygon = [point(-11, -6), point(12, -6), point(12, 9), point(-11, 9)];
 // Counterclockwise; the first edge is the open southern mouth, on the footprint boundary.
 const waterPolygon = [
-  point(-4.6, -6), point(4.6, -6), point(3.1, -2.9), point(2.35, -1.85), point(2.3, 0),
-  point(2.25, 1.4), point(1.5, 2.85), point(0.2, 3.3), point(-1.2, 2.9),
-  point(-2.15, 1.6), point(-2.3, 0), point(-2.6, -1.5), point(-3.4, -3.5),
+  point(-4.6, -6),
+  point(4.6, -6),
+  point(3.1, -2.9),
+  point(2.35, -1.85),
+  point(2.3, 0),
+  point(2.25, 1.4),
+  point(1.5, 2.85),
+  point(0.2, 3.3),
+  point(-1.2, 2.9),
+  point(-2.15, 1.6),
+  point(-2.3, 0),
+  point(-2.6, -1.5),
+  point(-3.4, -3.5),
 ];
 const spawn = point(-8, 0);
 const fork = point(-6, 0);
 const pad = { center: point(8.9, 0), radius: 1.02 };
-const safeCenterline = [spawn, fork, point(-6, 2.8), point(-4.5, 4.5), point(-1.6, 5.3), point(2.3, 5.3), point(5.6, 3.9), point(7.2, 1), pad.center];
-const ramp = { base: point(-4.9, 0), lip: point(-2.7, 0), length: 2.2, width: 1.8, rise: 0.65, lipPitch: Math.atan(1.3 / 2.2) };
+const safeCenterline = [
+  spawn,
+  fork,
+  point(-6, 2.8),
+  point(-4.5, 4.5),
+  point(-1.6, 5.3),
+  point(2.3, 5.3),
+  point(5.6, 3.9),
+  point(7.2, 1),
+  pad.center,
+];
+const ramp = {
+  base: point(-4.9, 0),
+  lip: point(-2.7, 0),
+  length: 2.2,
+  width: 1.8,
+  rise: 0.65,
+  lipPitch: Math.atan(1.3 / 2.2),
+};
 const landingRegion = { minX: 2.55, maxX: 7.2, minY: -1.65, maxY: 1.65 };
 const landingStart = point(landingRegion.minX, 0);
 const jumpCenterline = [spawn, fork, ramp.base, ramp.lip, landingStart, point(landingRegion.maxX, 0), pad.center];
@@ -57,17 +84,34 @@ export class BayLevel extends AuthoredLevel {
   readonly safeRoute = this.route(safeCenterline);
   readonly jumpRoute = this.route(jumpCenterline);
 
-  navigation(normal: Vector3, previous: BayRoute | null = null, context: NavigationContext = {}): BranchNavigation<BayRoute> {
-    return branchNavigation(normal, previous, context,
-      { leap: this.jumpRoute, coast: this.safeRoute }, ['leap', 'coast'],
-      this.toNormal(fork.x, fork.y), this.spawnPose.normal, this.destination.normal);
+  navigation(
+    normal: Vector3,
+    previous: BayRoute | null = null,
+    context: NavigationContext = {},
+  ): BranchNavigation<BayRoute> {
+    return branchNavigation(
+      normal,
+      previous,
+      context,
+      { leap: this.jumpRoute, coast: this.safeRoute },
+      ['leap', 'coast'],
+      this.toNormal(fork.x, fork.y),
+      this.spawnPose.normal,
+      this.destination.normal,
+    );
   }
 
   constructor(anchor: AuthoredLevelDefinition['anchor'] = BAY_LEVEL.anchor) {
     super({
       ...BAY_LEVEL,
       anchor: { ...anchor },
-      destination: { id: 'bakery', name: 'Sunrise Bakery', label: 'SUNRISE BAKERY', parcel: 'A bag of warm croissants', color: 0xf6b87b },
+      destination: {
+        id: 'bakery',
+        name: 'Sunrise Bakery',
+        label: 'SUNRISE BAKERY',
+        parcel: 'A bag of warm croissants',
+        color: 0xf6b87b,
+      },
     });
   }
 }

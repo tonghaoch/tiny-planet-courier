@@ -4,10 +4,22 @@ import { AudioFeedback } from './audio';
 
 class Parameter {
   value = 0;
-  setValueAtTime(value: number) { this.value = value; return this; }
-  setTargetAtTime(value: number) { this.value = value; return this; }
-  linearRampToValueAtTime(value: number) { this.value = value; return this; }
-  exponentialRampToValueAtTime(value: number) { this.value = value; return this; }
+  setValueAtTime(value: number) {
+    this.value = value;
+    return this;
+  }
+  setTargetAtTime(value: number) {
+    this.value = value;
+    return this;
+  }
+  linearRampToValueAtTime(value: number) {
+    this.value = value;
+    return this;
+  }
+  exponentialRampToValueAtTime(value: number) {
+    this.value = value;
+    return this;
+  }
 }
 class Node {
   gain = new Parameter();
@@ -19,12 +31,18 @@ class Node {
   immediateStops = 0;
   scheduledStops = 0;
   onended: (() => void) | null = null;
-  connect() { return this; }
+  connect() {
+    return this;
+  }
   disconnect() {}
-  start() { this.starts++; }
+  start() {
+    this.starts++;
+  }
   stop(at?: number) {
-    if (at === undefined) { this.immediateStops++; this.onended?.(); }
-    else this.scheduledStops++;
+    if (at === undefined) {
+      this.immediateStops++;
+      this.onended?.();
+    } else this.scheduledStops++;
   }
 }
 class FakeAudioContext {
@@ -38,13 +56,35 @@ class FakeAudioContext {
   oscillators: Node[] = [];
   sources: Node[] = [];
   closed = false;
-  constructor() { FakeAudioContext.instances.push(this); }
-  createGain() { const node = new Node(); this.gains.push(node); return node; }
-  createOscillator() { const node = new Node(); this.oscillators.push(node); return node; }
-  createBufferSource() { const node = new Node(); this.sources.push(node); return node; }
-  createBuffer(_channels: number, samples: number) { return { getChannelData: () => new Float32Array(samples) }; }
-  async resume() { if (FakeAudioContext.failResume) throw new Error('Audio blocked'); this.state = 'running'; }
-  async close() { this.closed = true; this.state = 'closed'; }
+  constructor() {
+    FakeAudioContext.instances.push(this);
+  }
+  createGain() {
+    const node = new Node();
+    this.gains.push(node);
+    return node;
+  }
+  createOscillator() {
+    const node = new Node();
+    this.oscillators.push(node);
+    return node;
+  }
+  createBufferSource() {
+    const node = new Node();
+    this.sources.push(node);
+    return node;
+  }
+  createBuffer(_channels: number, samples: number) {
+    return { getChannelData: () => new Float32Array(samples) };
+  }
+  async resume() {
+    if (FakeAudioContext.failResume) throw new Error('Audio blocked');
+    this.state = 'running';
+  }
+  async close() {
+    this.closed = true;
+    this.state = 'closed';
+  }
 }
 
 beforeEach(() => {
@@ -67,7 +107,8 @@ describe('quiet, bounded driving audio', () => {
     const audio = new AudioFeedback();
     audio.toggle();
     const context = FakeAudioContext.instances[0];
-    for (let i = 0; i < 200; i++) audio.updateDrive({ speed: i % 8, phase: i % 3 ? 'grounded' : 'airborne', boosting: i % 2 === 0, active: true });
+    for (let i = 0; i < 200; i++)
+      audio.updateDrive({ speed: i % 8, phase: i % 3 ? 'grounded' : 'airborne', boosting: i % 2 === 0, active: true });
     expect(context.oscillators).toHaveLength(1);
     expect(context.sources).toHaveLength(1);
     expect(context.oscillators[0].starts).toBe(1);

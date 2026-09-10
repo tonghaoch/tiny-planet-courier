@@ -5,8 +5,28 @@ import { PLANET_RADIUS as R } from './math';
 const spawn = point(-11, 0);
 const fork = point(-8.2, 0);
 const pad = { center: point(0, 0), radius: 1.35 };
-const outer = [spawn, fork, point(-7, -2.6), point(-5, -4.4), point(-2.5, -4.8), point(0.3, -4), point(1.7, -2.2), point(1.3, -0.8), pad.center];
-const inner = [spawn, fork, point(-6.7, 0), point(-5.5, 1.7), point(-4.2, 1.7), point(-3.3, 0), point(-2.6, -1), point(-1, -1), pad.center];
+const outer = [
+  spawn,
+  fork,
+  point(-7, -2.6),
+  point(-5, -4.4),
+  point(-2.5, -4.8),
+  point(0.3, -4),
+  point(1.7, -2.2),
+  point(1.3, -0.8),
+  pad.center,
+];
+const inner = [
+  spawn,
+  fork,
+  point(-6.7, 0),
+  point(-5.5, 1.7),
+  point(-4.2, 1.7),
+  point(-3.3, 0),
+  point(-2.6, -1),
+  point(-1, -1),
+  pad.center,
+];
 const footprint = [point(-13, -6.6), point(4, -6.6), point(4, 5), point(-13, 5)];
 
 export const STATION_LEVEL = {
@@ -41,11 +61,19 @@ export const STATION_LEVEL = {
   sceneryClearance: 1.4,
   overlayMaxEdge: 0.5,
   reactionDuration: 2.65,
-  destination: { id: 'observatory', name: 'Stargaze Station', label: 'STARGAZE STATION', parcel: 'A letter from Earth', color: 0xc6b6ea },
+  destination: {
+    id: 'observatory',
+    name: 'Stargaze Station',
+    label: 'STARGAZE STATION',
+    parcel: 'A letter from Earth',
+    color: 0xc6b6ea,
+  },
 } as const;
 
 export type { RoadRoute as StationRoute } from './road-level';
 
 export class StationLevel extends RoadLevel {
-  constructor(anchor: AuthoredLevelDefinition['anchor'] = STATION_LEVEL.anchor) { super({ ...STATION_LEVEL, anchor: { ...anchor } }); }
+  constructor(anchor: AuthoredLevelDefinition['anchor'] = STATION_LEVEL.anchor) {
+    super({ ...STATION_LEVEL, anchor: { ...anchor } });
+  }
 }

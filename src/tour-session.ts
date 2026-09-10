@@ -5,7 +5,11 @@ import type { SurfacePose } from './bay-types';
 import { TourLayout, type TourStop, type TourStopId } from './tour-layout';
 
 export const TOUR_RECORD_KEY = 'tiny-planet-courier:tour:best:v1';
-export interface TourSplit { readonly stopId: TourStopId; readonly elapsed: number; readonly cumulative: number }
+export interface TourSplit {
+  readonly stopId: TourStopId;
+  readonly elapsed: number;
+  readonly cumulative: number;
+}
 export interface TourCheckpoint {
   readonly stopId: TourStopId;
   readonly kind: 'entry' | 'pad';
@@ -22,15 +26,29 @@ export class TourSession extends DeliveryRun {
   private earnedCheckpoint: TourCheckpoint;
 
   constructor(readonly layout: TourLayout = new TourLayout()) {
-    super(layout.destinations.map(d => ({ ...d, normal: d.normal.clone() })), { keepDrivingOnFinish: true });
-    this.safePoints = layout.stops.map(stop => ({ entry: clonePose(stop.entryPose), pad: clonePose(stop.deliveredPose) }));
+    super(
+      layout.destinations.map(d => ({ ...d, normal: d.normal.clone() })),
+      { keepDrivingOnFinish: true },
+    );
+    this.safePoints = layout.stops.map(stop => ({
+      entry: clonePose(stop.entryPose),
+      pad: clonePose(stop.deliveredPose),
+    }));
     this.earnedCheckpoint = this.checkpointAt(0, 'entry');
   }
 
-  get splits(): readonly TourSplit[] { return this.legSplits.map(split => ({ ...split })); }
-  get entryVisited(): readonly boolean[] { return [...this.visited]; }
-  get currentStop(): TourStop | undefined { return this.layout.stops[this.index]; }
-  get checkpoint(): TourCheckpoint { return { ...this.earnedCheckpoint, pose: clonePose(this.earnedCheckpoint.pose) }; }
+  get splits(): readonly TourSplit[] {
+    return this.legSplits.map(split => ({ ...split }));
+  }
+  get entryVisited(): readonly boolean[] {
+    return [...this.visited];
+  }
+  get currentStop(): TourStop | undefined {
+    return this.layout.stops[this.index];
+  }
+  get checkpoint(): TourCheckpoint {
+    return { ...this.earnedCheckpoint, pose: clonePose(this.earnedCheckpoint.pose) };
+  }
 
   override start(): void {
     super.start();
@@ -53,7 +71,9 @@ export class TourSession extends DeliveryRun {
   private checkpointAt(index: number, kind: 'entry' | 'pad'): TourCheckpoint {
     const stop = this.layout.stops[index];
     return {
-      stopId: stop.id, kind, label: `${stop.destination.name} ${kind === 'entry' ? 'entrance' : 'delivery pad'}`,
+      stopId: stop.id,
+      kind,
+      label: `${stop.destination.name} ${kind === 'entry' ? 'entrance' : 'delivery pad'}`,
       pose: clonePose(this.safePoints[index][kind]),
     };
   }
@@ -71,7 +91,11 @@ export class TourSession extends DeliveryRun {
     const event = super.update(dt, normal, speed, altitude, grounded);
     if (!event) return null;
     const previous = this.legSplits.at(-1)?.cumulative ?? 0;
-    this.legSplits.push({ stopId: this.layout.stops[event.index].id, elapsed: this.elapsed - previous, cumulative: this.elapsed });
+    this.legSplits.push({
+      stopId: this.layout.stops[event.index].id,
+      elapsed: this.elapsed - previous,
+      cumulative: this.elapsed,
+    });
     this.earnedCheckpoint = this.checkpointAt(event.index, 'pad');
     return event;
   }

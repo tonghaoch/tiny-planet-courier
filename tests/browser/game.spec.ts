@@ -1,31 +1,43 @@
+import { planetSnapshot, dockAtTarget } from '../helpers/planet-test';
 import { expect, test, type Page } from '@playwright/test';
 
 async function snapshot(page: Page) {
-  return page.evaluate(() => (window as any).__planetTest.snapshot());
+  return planetSnapshot(page);
 }
 
 async function expectEnglish(page: Page) {
   await expect(page.locator('html')).toHaveAttribute('lang', 'en');
   await expect(page).toHaveTitle('Tiny Planet Courier');
-  const content = await page.evaluate(() => [
-    document.body.textContent,
-    document.querySelector('meta[name="description"]')?.getAttribute('content'),
-    ...Array.from(document.querySelectorAll('[aria-label], [title]'), element => `${element.getAttribute('aria-label') ?? ''} ${element.getAttribute('title') ?? ''}`),
-  ].join('\n'));
+  const content = await page.evaluate(() =>
+    [
+      document.body.textContent,
+      document.querySelector('meta[name="description"]')?.getAttribute('content'),
+      ...Array.from(
+        document.querySelectorAll('[aria-label], [title]'),
+        element => `${element.getAttribute('aria-label') ?? ''} ${element.getAttribute('title') ?? ''}`,
+      ),
+    ].join('\n'),
+  );
   expect(content).not.toMatch(/\p{Script=Han}/u);
 }
 
 async function expectTextFits(page: Page, selector: string) {
-  const overflow = await page.locator(selector).evaluateAll(elements => elements
-    .filter(element => element.getClientRects().length > 0 && element.scrollWidth > element.clientWidth + 2)
-    .map(element => element.id || element.className));
+  const overflow = await page
+    .locator(selector)
+    .evaluateAll(elements =>
+      elements
+        .filter(element => element.getClientRects().length > 0 && element.scrollWidth > element.clientWidth + 2)
+        .map(element => element.id || element.className),
+    );
   expect(overflow).toEqual([]);
 }
 
 async function load(page: Page) {
   const errors: string[] = [];
   page.on('pageerror', error => errors.push(error.message));
-  page.on('console', message => { if (message.type() === 'error') errors.push(message.text()); });
+  page.on('console', message => {
+    if (message.type() === 'error') errors.push(message.text());
+  });
   await page.goto('/?prototype=standard&test=1');
   await expect(page.locator('#app')).toHaveAttribute('data-ready', 'true');
   await expect(page.locator('#error-panel')).toBeHidden();
@@ -68,7 +80,7 @@ test('desktop scene, keyboard driving, pause, delivery and replay', async ({ pag
     await expect(page.locator('#mission-name')).toHaveText(destinations[index]);
     await expectEnglish(page);
     await expectTextFits(page, '.mission-card, #mission-name, #mission-parcel, #mission-hint');
-    await page.evaluate(() => (window as any).__planetTest.dockAtTarget());
+    await dockAtTarget(page);
     await expect.poll(async () => (await snapshot(page)).index).toBe(index + 1);
   }
   await expect(page.getByRole('dialog', { name: 'All smiles, delivered.' })).toBeVisible();
@@ -124,10 +136,13 @@ test('simultaneous touch steering and acceleration release correctly', async ({ 
   const gas = await page.getByRole('button', { name: 'Drive forward', exact: true }).boundingBox();
   const left = await page.getByRole('button', { name: 'Turn left', exact: true }).boundingBox();
   const cdp = await context.newCDPSession(page);
-  await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [
-    { x: gas!.x + gas!.width / 2, y: gas!.y + gas!.height / 2, id: 0 },
-    { x: left!.x + left!.width / 2, y: left!.y + left!.height / 2, id: 1 },
-  ] });
+  await cdp.send('Input.dispatchTouchEvent', {
+    type: 'touchStart',
+    touchPoints: [
+      { x: gas!.x + gas!.width / 2, y: gas!.y + gas!.height / 2, id: 0 },
+      { x: left!.x + left!.width / 2, y: left!.y + left!.height / 2, id: 1 },
+    ],
+  });
   await page.waitForTimeout(900);
   const turning = await snapshot(page);
   expect(turning.speed).toBeGreaterThan(1);
@@ -142,7 +157,7 @@ test('simultaneous touch steering and acceleration release correctly', async ({ 
 test('unsupported graphics produces a readable recovery screen', async ({ page }) => {
   await page.addInitScript(() => {
     const original = HTMLCanvasElement.prototype.getContext;
-    HTMLCanvasElement.prototype.getContext = function (type: string, ...args: any[]) {
+    HTMLCanvasElement.prototype.getContext = function (this: HTMLCanvasElement, type: string, ...args: unknown[]) {
       if (type.includes('webgl')) return null;
       return Reflect.apply(original, this, [type, ...args]);
     } as typeof original;
@@ -156,12 +171,16 @@ test('unsupported graphics produces a readable recovery screen', async ({ page }
 
 test('storage failure does not prevent finishing a delivery run', async ({ page }) => {
   await page.addInitScript(() => {
-    Object.defineProperty(window, 'localStorage', { get() { throw new DOMException('Disabled', 'SecurityError'); } });
+    Object.defineProperty(window, 'localStorage', {
+      get() {
+        throw new DOMException('Disabled', 'SecurityError');
+      },
+    });
   });
   const errors = await load(page);
   await page.getByRole('button', { name: 'Start delivering' }).click();
   for (let index = 0; index < 3; index++) {
-    await page.evaluate(() => (window as any).__planetTest.dockAtTarget());
+    await dockAtTarget(page);
     await expect.poll(async () => (await snapshot(page)).index).toBe(index + 1);
   }
   await expect(page.getByRole('dialog', { name: 'All smiles, delivered.' })).toBeVisible();
@@ -188,7 +207,7 @@ test('English labels and dialogs fit a small phone screen', async ({ page }) => 
   for (let index = 0; index < 3; index++) {
     await expect(page.locator('#mission-name')).toHaveText(destinations[index]);
     await expectTextFits(page, '.mission-card, #mission-name, #mission-parcel, #mission-hint, .boost-readout');
-    await page.evaluate(() => (window as any).__planetTest.dockAtTarget());
+    await dockAtTarget(page);
     await expect.poll(async () => (await snapshot(page)).index).toBe(index + 1);
   }
   await expect(page.getByRole('dialog', { name: 'All smiles, delivered.' })).toBeVisible();

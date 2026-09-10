@@ -7,7 +7,9 @@ import { PlanetWorld } from './world';
 import { createBayPilot } from '../tests/helpers/bay-pilot';
 
 let world: PlanetWorld;
-beforeAll(() => { world = new PlanetWorld(true); });
+beforeAll(() => {
+  world = new PlanetWorld(true);
+});
 
 function driveRoute(shortcut: boolean) {
   const drive = new BayDrive(world.bayEnvironment!);

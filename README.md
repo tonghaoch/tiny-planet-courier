@@ -90,21 +90,20 @@ Finish all three deliveries to see your total and leg splits; transfers count to
 
 ## Build and test
 
+See [architecture and developer commands](docs/architecture.md) and the [engineering release checkpoint](docs/iteration-plan.md#engineering-release-checkpoint--2026-09-10) for pre-release local validation.
+
 ```sh
-npm run build
-npm test
-npm run test:browser
-npm run test:preview
-npm run preview
+npm run check         # Format, lint and all-project types
+npm run verify        # check + Vitest + Node bundle tests + build + budget audit
+npm run test:browser  # DEV browser suite; run after verify finishes
+npm run test:preview  # Build + production browser suite; run after DEV finishes
+npm run preview      # Serve the existing build
 ```
 
-- `build`: Checks TypeScript and generates the static site in `dist/`.
-- `test`: Runs Vitest unit tests for spherical math, driving, delivery rules and entry selection.
-- `test:browser`: Uses Playwright to check the original comparison, independent slices and connected Tour, including physically driven routes, desktop/narrow layouts, deliveries, replay, touch controls, graphics recovery and unavailable storage. Defaults to locally installed Microsoft Edge; with Chrome installed, use `PLAYWRIGHT_CHANNEL=chrome npm run test:browser`.
-- `test:preview`: Builds and checks the production Tour default, query-override isolation, absence of the test bridge, real keyboard lifecycle and narrow pointer input. Use `PLAYWRIGHT_CHANNEL=chrome npm run test:preview` to select Chrome instead of Edge.
-- Browser screenshots are saved to ignored `artifacts/`; failure diagnostics go to `test-results/`. The two selected README JPEGs are maintained documentation assets, not generated test outputs.
-
-Run development-browser and production-preview checks **sequentially**. See the [handoff](docs/iteration-plan.md#official-tour-release-verification--2026-09-09) for primary-observed release results and fresh-process split commands; these are not a claim of one all-in-one browser run.
+- `npm run format` writes Biome formatting; `npm test` runs Vitest; `npm run build` checks runtime TypeScript and generates `dist/`.
+- Browser checks default to installed Microsoft Edge. Use `PLAYWRIGHT_CHANNEL=chrome npm run test:browser` (or `test:preview`) for installed Chrome. Real-input routes, keyboard/touch, recovery and HUD checks remain separate from fixture-only UI/state checks.
+- Keep browser sessions **sequential and exclusive**: no source edits, builds, or worktree creation/deletion during DEV checks. Even read-only review using temporary worktrees can generate filesystem events.
+- Generated screenshots and diagnostics remain in ignored `artifacts/` and `test-results/`; the two README JPEGs remain maintained documentation assets.
 
 The production build uses the `/tiny-planet-courier/` base path. After building, `npm run preview` serves Tour at **http://127.0.0.1:4173/tiny-planet-courier/** by default; `npm run dev` uses the root URL. Update `vite.config.ts` if you deploy under a different path or a custom domain. Do not launch the source by double-clicking `index.html` with a `file://` URL.
 
@@ -112,17 +111,16 @@ The production build uses the `/tiny-planet-courier/` base path. After building,
 
 **Online play:** https://tonghaoch.github.io/tiny-planet-courier/
 
-Every push to `main` runs the existing [Deploy to GitHub Pages workflow](.github/workflows/deploy.yml):
+The [Deploy to GitHub Pages workflow](.github/workflows/deploy.yml) is triggered by pushes to `main` or manual dispatch. Both it and the [PR CI workflow](.github/workflows/ci.yml) run `npm run verify`. The release workflow:
 
 1. Set up Node.js 24 and install locked dependencies with `npm ci`.
-2. Run unit tests with `npm test`.
-3. Build the game with `npm run build`.
-4. Upload `dist/` with the official Pages artifact action.
-5. Deploy to GitHub Pages using the `github-pages` environment.
+2. Run `npm run verify` (static checks, Vitest, Node bundle tests, build and budget audit).
+3. Upload `dist/` with the official Pages artifact action.
+4. Deploy to GitHub Pages using the `github-pages` environment, restricted to `main`.
 
-Deployment proceeds only when tests and build succeed. The workflow uses GitHub's built-in token; no personal access token or additional repository secret is required. Build artifacts remain out of Git history. The primary's release report verifies the workflow and actual public game against the exact pushed SHA; push success alone is not deployment confirmation.
+Deployment requires verification to succeed. The workflow uses GitHub's built-in token; no personal access token or additional repository secret is required. Build artifacts remain out of Git history. Confirm publication from successful Actions and Pages deployment status for the **exact pushed SHA**, not from a push alone.
 
-To redeploy manually, open **Actions → Deploy to GitHub Pages → Run workflow** and select `main`. The repository's **Settings → Pages → Source** must be **GitHub Actions**. Production deployments are restricted to `main`. Browser tests remain separate local checks because they require an installed browser; the deployment workflow runs unit tests and the production build on Ubuntu.
+To redeploy manually, open **Actions → Deploy to GitHub Pages → Run workflow** and select `main`. The repository's **Settings → Pages → Source** must be **GitHub Actions**. Browser tests remain separate local checks, not part of either Ubuntu workflow.
 
 ## Technology and scope
 

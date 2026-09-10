@@ -1,13 +1,16 @@
+import { localeSnapshot, setPlanetControls, dockAtTarget, roadRoutes } from '../helpers/planet-test';
 import { expect, test, type Page } from '@playwright/test';
 import { Vector3 } from 'three';
 import { createBayPilot } from '../helpers/bay-pilot';
 
-const snapshot = (page: Page) => page.evaluate(() => (window as any).__planetTest.snapshot());
+const snapshot = (page: Page) => localeSnapshot(page);
 
 async function loadGarden(page: Page) {
   const errors: string[] = [];
   page.on('pageerror', error => errors.push(error.message));
-  page.on('console', message => { if (message.type() === 'error') errors.push(message.text()); });
+  page.on('console', message => {
+    if (message.type() === 'error') errors.push(message.text());
+  });
   await page.goto('/?prototype=garden&test=1');
   await expect(page.locator('#app')).toHaveAttribute('data-ready', 'true');
   await expect(page.locator('#app')).toHaveAttribute('data-prototype', 'garden');
@@ -18,7 +21,7 @@ async function loadGarden(page: Page) {
 }
 
 async function driveRoute(page: Page, name: 'outer' | 'inner') {
-  const data = await page.evaluate(() => (window as any).__planetTest.routes());
+  const data = await roadRoutes(page);
   const route = data[name].map((p: number[]) => new Vector3().fromArray(p));
   const pilot = createBayPilot(route, new Vector3().fromArray(data.destination), false);
   const deadline = Date.now() + 35000;
@@ -29,7 +32,7 @@ async function driveRoute(page: Page, name: 'outer' | 'inner') {
     const state = await snapshot(page);
     if (state.route) choices.add(state.route);
     if (state.finished) {
-      await page.evaluate(() => (window as any).__planetTest.setControls(null));
+      await setPlanetControls(page, null);
       expect(choices.has(name)).toBe(true);
       if (name === 'inner') {
         expect(bendSpeeds.length).toBeGreaterThan(3);
@@ -37,8 +40,12 @@ async function driveRoute(page: Page, name: 'outer' | 'inner') {
       }
       return state;
     }
-    const controls = pilot({ ...state, normal: new Vector3().fromArray(state.normal), forward: new Vector3().fromArray(state.forward) });
-    await page.evaluate(value => (window as any).__planetTest.setControls(value), controls);
+    const controls = pilot({
+      ...state,
+      normal: new Vector3().fromArray(state.normal),
+      forward: new Vector3().fromArray(state.forward),
+    });
+    await setPlanetControls(page, controls);
     if (name === 'inner' && state.local.x > -9 && state.local.x < -3) {
       bendSpeeds.push(state.speed);
       if (!pathCaptured && state.local.x > -7) {
@@ -51,7 +58,9 @@ async function driveRoute(page: Page, name: 'outer' | 'inner') {
   throw new Error(`Garden ${name} did not finish: ${JSON.stringify(await snapshot(page))}`);
 }
 
-test('both Garden routes are driven, with continuous S-bends, blooming feedback and isolated records', async ({ page }) => {
+test('both Garden routes are driven, with continuous S-bends, blooming feedback and isolated records', async ({
+  page,
+}) => {
   test.setTimeout(90000);
   await page.addInitScript(() => {
     localStorage.setItem('tiny-planet-courier:best:v1', '77');
@@ -69,7 +78,8 @@ test('both Garden routes are driven, with continuous S-bends, blooming feedback 
   await page.waitForTimeout(1000);
   await page.screenshot({ path: 'artifacts/garden-start.png' });
   const outer = await driveRoute(page, 'outer');
-  expect(outer.recoveries).toBe(0); expect(outer.jumps).toBe(0);
+  expect(outer.recoveries).toBe(0);
+  expect(outer.jumps).toBe(0);
   expect(outer.events).not.toContain('collision');
   await expect(page.locator('#bay-result')).toBeVisible();
   await expect(page.getByRole('dialog')).toBeHidden();
@@ -86,7 +96,7 @@ test('both Garden routes are driven, with continuous S-bends, blooming feedback 
   expect(delivered.landingGuideVisible).toBe(false);
   expect(delivered.drawCalls).toBeLessThan(400);
   await page.screenshot({ path: 'artifacts/garden-delivered.png' });
-  await page.evaluate(() => (window as any).__planetTest.setControls({ throttle: 1, steer: 0.4, boost: false }));
+  await setPlanetControls(page, { throttle: 1, steer: 0.4, boost: false });
   await page.waitForTimeout(450);
   const moving = await snapshot(page);
   expect(moving.normal).not.toEqual(delivered.normal);
@@ -96,37 +106,48 @@ test('both Garden routes are driven, with continuous S-bends, blooming feedback 
   expect((await snapshot(page)).reaction.bloom).toBe(0);
   await page.waitForTimeout(1000);
   const inner = await driveRoute(page, 'inner');
-  expect(inner.recoveries).toBe(0); expect(inner.jumps).toBe(0);
+  expect(inner.recoveries).toBe(0);
+  expect(inner.jumps).toBe(0);
   expect(inner.events).not.toContain('collision');
   expect(inner.elapsed).toBeLessThan(outer.elapsed);
   await expect(page.locator('#bay-result')).toBeVisible();
   expect(await page.evaluate(() => localStorage.getItem('tiny-planet-courier:best:v1'))).toBe('77');
   expect(await page.evaluate(() => localStorage.getItem('tiny-planet-courier:bay-leap:best:v1'))).toBe('88');
   expect(await page.evaluate(() => localStorage.getItem('tiny-planet-courier:station:best:v1'))).toBe('66');
-  expect(Number(await page.evaluate(() => localStorage.getItem('tiny-planet-courier:garden:best:v1')))).toBe(inner.elapsed);
+  expect(Number(await page.evaluate(() => localStorage.getItem('tiny-planet-courier:garden:best:v1')))).toBe(
+    inner.elapsed,
+  );
   expect(errors).toEqual([]);
-  console.log(`Garden route times: loop ${outer.elapsed.toFixed(2)}s, flower path ${inner.elapsed.toFixed(2)}s; both physically driven.`);
+  console.log(
+    `Garden route times: loop ${outer.elapsed.toFixed(2)}s, flower path ${inner.elapsed.toFixed(2)}s; both physically driven.`,
+  );
 });
 
-test('Garden keyboard, immediate recovery and paused handoff reset without stale blooms or results', async ({ page }) => {
+test('Garden keyboard, immediate recovery and paused handoff reset without stale blooms or results', async ({
+  page,
+}) => {
   const errors = await loadGarden(page);
   await page.getByRole('button', { name: 'Start delivering' }).click();
   await page.getByRole('button', { name: 'Enable sound effects' }).click();
-  await page.keyboard.down('KeyW'); await page.keyboard.down('Space');
+  await page.keyboard.down('KeyW');
+  await page.keyboard.down('Space');
   await page.waitForTimeout(600);
   const driven = await snapshot(page);
   expect(driven.speed).toBeGreaterThan(1);
-  expect(driven.charge).toBeLessThan(1); expect(driven.jumps).toBe(0);
-  await page.keyboard.up('KeyW'); await page.keyboard.up('Space');
+  expect(driven.charge).toBeLessThan(1);
+  expect(driven.jumps).toBe(0);
+  await page.keyboard.up('KeyW');
+  await page.keyboard.up('Space');
   await page.keyboard.press('KeyR');
   await expect.poll(async () => (await snapshot(page)).recoveries).toBe(1);
   const recovered = await snapshot(page);
   expect(recovered.local.x).toBeCloseTo(-13, 2);
   expect(recovered.elapsed).toBeGreaterThanOrEqual(driven.elapsed);
-  expect(recovered.cargoVisible).toBe(true); expect(recovered.index).toBe(0);
+  expect(recovered.cargoVisible).toBe(true);
+  expect(recovered.index).toBe(0);
   expect(recovered.charge).toBe(1);
   // Route reachability is tested above; docking isolates pause/reset during handoff.
-  await page.evaluate(() => (window as any).__planetTest.dockAtTarget());
+  await dockAtTarget(page);
   await expect.poll(async () => (await snapshot(page)).finished).toBe(true);
   await page.getByRole('button', { name: 'Pause game' }).click();
   const paused = await snapshot(page);
@@ -137,9 +158,12 @@ test('Garden keyboard, immediate recovery and paused handoff reset without stale
   await page.waitForTimeout(1500);
   await expect(page.locator('#bay-result')).toBeHidden();
   const restarted = await snapshot(page);
-  expect(restarted.finished).toBe(false); expect(restarted.index).toBe(0);
-  expect(restarted.cargoVisible).toBe(true); expect(restarted.reaction.bloom).toBe(0);
-  expect(restarted.reaction.progress).toBe(0); expect(restarted.recoveries).toBe(0);
+  expect(restarted.finished).toBe(false);
+  expect(restarted.index).toBe(0);
+  expect(restarted.cargoVisible).toBe(true);
+  expect(restarted.reaction.bloom).toBe(0);
+  expect(restarted.reaction.progress).toBe(0);
+  expect(restarted.recoveries).toBe(0);
   expect(restarted.speed).toBe(0);
   await page.keyboard.press('Escape');
   await page.getByRole('dialog').getByRole('button', { name: 'Back to home', exact: true }).click();
@@ -149,27 +173,41 @@ test('Garden keyboard, immediate recovery and paused handoff reset without stale
   expect(errors).toEqual([]);
 });
 
-test('Garden phone controls and retry remain usable with reduced motion and unavailable storage', async ({ browser }) => {
-  const context = await browser.newContext({ baseURL: 'http://127.0.0.1:5173', viewport: { width: 320, height: 640 }, hasTouch: true, reducedMotion: 'reduce' });
+test('Garden phone controls and retry remain usable with reduced motion and unavailable storage', async ({
+  browser,
+}) => {
+  const context = await browser.newContext({
+    baseURL: 'http://127.0.0.1:5173',
+    viewport: { width: 320, height: 640 },
+    hasTouch: true,
+    reducedMotion: 'reduce',
+  });
   const page = await context.newPage();
   try {
     await page.addInitScript(() => {
-      Storage.prototype.getItem = () => { throw new Error('storage unavailable'); };
-      Storage.prototype.setItem = () => { throw new Error('storage unavailable'); };
+      Storage.prototype.getItem = () => {
+        throw new Error('storage unavailable');
+      };
+      Storage.prototype.setItem = () => {
+        throw new Error('storage unavailable');
+      };
     });
     const errors = await loadGarden(page);
     await page.getByRole('button', { name: 'Start delivering' }).tap();
     const cdp = await context.newCDPSession(page);
     const gas = await page.getByRole('button', { name: 'Drive forward', exact: true }).boundingBox();
     const right = await page.getByRole('button', { name: 'Turn right', exact: true }).boundingBox();
-    await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [
-      { x: gas!.x + gas!.width / 2, y: gas!.y + gas!.height / 2, id: 0 },
-      { x: right!.x + right!.width / 2, y: right!.y + right!.height / 2, id: 1 },
-    ] });
+    await cdp.send('Input.dispatchTouchEvent', {
+      type: 'touchStart',
+      touchPoints: [
+        { x: gas!.x + gas!.width / 2, y: gas!.y + gas!.height / 2, id: 0 },
+        { x: right!.x + right!.width / 2, y: right!.y + right!.height / 2, id: 1 },
+      ],
+    });
     await page.waitForTimeout(400);
     expect((await snapshot(page)).speed).toBeGreaterThan(0.5);
     await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
-    await page.evaluate(() => (window as any).__planetTest.dockAtTarget());
+    await dockAtTarget(page);
     await expect(page.locator('#bay-result')).toBeVisible();
     await expect.poll(async () => (await snapshot(page)).reaction.flowersBloomed).toBe(true);
     const card = await page.locator('#bay-result').boundingBox();
@@ -180,7 +218,10 @@ test('Garden phone controls and retry remain usable with reduced motion and unav
     expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(320);
     await page.screenshot({ path: 'artifacts/garden-delivered-mobile.png' });
     const elapsed = (await snapshot(page)).elapsed;
-    await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x: gas!.x + gas!.width / 2, y: gas!.y + gas!.height / 2, id: 0 }] });
+    await cdp.send('Input.dispatchTouchEvent', {
+      type: 'touchStart',
+      touchPoints: [{ x: gas!.x + gas!.width / 2, y: gas!.y + gas!.height / 2, id: 0 }],
+    });
     await page.waitForTimeout(450);
     expect((await snapshot(page)).speed).toBeGreaterThan(0.7);
     expect((await snapshot(page)).elapsed).toBe(elapsed);
@@ -188,9 +229,13 @@ test('Garden phone controls and retry remain usable with reduced motion and unav
     await page.getByRole('button', { name: 'Try another route' }).tap();
     await expect(page.locator('#bay-result')).toBeHidden();
     const retry = await snapshot(page);
-    expect(retry.finished).toBe(false); expect(retry.cargoVisible).toBe(true);
-    expect(retry.reaction.progress).toBe(0); expect(retry.reaction.bloom).toBe(0);
+    expect(retry.finished).toBe(false);
+    expect(retry.cargoVisible).toBe(true);
+    expect(retry.reaction.progress).toBe(0);
+    expect(retry.reaction.bloom).toBe(0);
     expect(retry.reaction.flowersBloomed).toBe(false);
     expect(errors).toEqual([]);
-  } finally { await context.close(); }
+  } finally {
+    await context.close();
+  }
 });

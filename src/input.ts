@@ -3,13 +3,26 @@ import type { Controls } from './vehicle';
 export class Input {
   private readonly keys = new Set<string>();
   private readonly pointers = new Map<number, string>();
-  private readonly gameplayKeys = new Set(['KeyW', 'KeyA', 'KeyS', 'KeyD', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Space']);
+  private readonly gameplayKeys = new Set([
+    'KeyW',
+    'KeyA',
+    'KeyS',
+    'KeyD',
+    'ArrowUp',
+    'ArrowDown',
+    'ArrowLeft',
+    'ArrowRight',
+    'Space',
+  ]);
 
   constructor(isPlaying: () => boolean, pause: () => void, recover: () => void) {
     window.addEventListener('keydown', event => {
       if (event.altKey || event.ctrlKey || event.metaKey) return;
       if (event.target instanceof HTMLElement && ['INPUT', 'TEXTAREA', 'SELECT'].includes(event.target.tagName)) return;
-      if (event.code === 'Escape' && !event.repeat) { pause(); return; }
+      if (event.code === 'Escape' && !event.repeat) {
+        pause();
+        return;
+      }
       if (!isPlaying()) return;
       // Native buttons still respond to keyboard activation; do not drive while focusing them.
       if (event.code === 'Space' && event.target instanceof HTMLButtonElement) return;
@@ -34,9 +47,15 @@ export class Input {
       button.addEventListener('pointercancel', release);
       button.addEventListener('lostpointercapture', release);
     });
-    window.addEventListener('blur', () => { this.clear(); if (isPlaying()) pause(); });
+    window.addEventListener('blur', () => {
+      this.clear();
+      if (isPlaying()) pause();
+    });
     document.addEventListener('visibilitychange', () => {
-      if (document.hidden) { this.clear(); if (isPlaying()) pause(); }
+      if (document.hidden) {
+        this.clear();
+        if (isPlaying()) pause();
+      }
     });
   }
 
@@ -50,8 +69,11 @@ export class Input {
     const touch = new Set(this.pointers.values());
     const down = (...codes: string[]) => codes.some(code => this.keys.has(code));
     return {
-      throttle: Number(down('KeyW', 'ArrowUp') || touch.has('gas')) - Number(down('KeyS', 'ArrowDown') || touch.has('brake')),
-      steer: Number(down('KeyD', 'ArrowRight') || touch.has('right')) - Number(down('KeyA', 'ArrowLeft') || touch.has('left')),
+      throttle:
+        Number(down('KeyW', 'ArrowUp') || touch.has('gas')) - Number(down('KeyS', 'ArrowDown') || touch.has('brake')),
+      steer:
+        Number(down('KeyD', 'ArrowRight') || touch.has('right')) -
+        Number(down('KeyA', 'ArrowLeft') || touch.has('left')),
       boost: down('Space') || touch.has('boost'),
     };
   }

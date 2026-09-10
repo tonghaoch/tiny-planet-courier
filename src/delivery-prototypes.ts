@@ -142,22 +142,28 @@ export const PROTOTYPES: Readonly<Record<PrototypeId, PrototypeDefinition>> = {
     home: {
       eyebrow: 'THREE-STOP TOUR',
       title: 'Three stops.<br>One big <span class="warm-word">day.</span>',
-      description: 'Bakery, station, garden. One connected journey.<br>Pick your paths and follow the roads between stops.',
+      description:
+        'Bakery, station, garden. One connected journey.<br>Pick your paths and follow the roads between stops.',
       ticketHeading: 'ONE PLANET · THREE STOPS',
-      place: 'Mint Planet', code: 'TOUR-01', parcelLabel: 'little parcels',
+      place: 'Mint Planet',
+      code: 'TOUR-01',
+      parcelLabel: 'little parcels',
       ticketDetail: 'Bay → Station → Garden',
     },
     hints: {
       start: 'Bakery first. Take the coast road—or boost across the bay.',
       recovery: 'Back at your last reached safe point. Your deliveries are safe.',
       choice: 'Choose a local path, then follow the connecting road.',
-      outer: 'Take the wide way round.', inner: 'Take the shorter local path.',
+      outer: 'Take the wide way round.',
+      inner: 'Take the shorter local path.',
       nearDestination: 'Brake and park in the glow.',
     },
     result: {
       heading: 'Three smiles, delivered.',
       description: 'Keep exploring. The road returns to the bay.',
-      bestLabel: 'Tour best', newRecord: 'A new tour best!', delivered: 'All three parcels delivered.',
+      bestLabel: 'Tour best',
+      newRecord: 'A new tour best!',
+      delivered: 'All three parcels delivered.',
     },
   },
 };

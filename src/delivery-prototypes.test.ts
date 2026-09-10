@@ -11,17 +11,34 @@ describe('prototype entry policy', () => {
   });
 
   it.each([
-    '', '?test=1', '?other=value', '?prototype', '?prototype=', '?prototype=unknown',
-    '?prototype=Bay', '?prototype=Station', '?prototype=Garden', '?prototype=Tour', '?prototype=Standard',
-    '?prototype=constructor', '?prototype=__proto__', '?prototype=prototype', '?prototype=toString',
-    '?prototype=hasOwnProperty', '?prototype=%20tour', '?prototype=tour%20',
+    '',
+    '?test=1',
+    '?other=value',
+    '?prototype',
+    '?prototype=',
+    '?prototype=unknown',
+    '?prototype=Bay',
+    '?prototype=Station',
+    '?prototype=Garden',
+    '?prototype=Tour',
+    '?prototype=Standard',
+    '?prototype=constructor',
+    '?prototype=__proto__',
+    '?prototype=prototype',
+    '?prototype=toString',
+    '?prototype=hasOwnProperty',
+    '?prototype=%20tour',
+    '?prototype=tour%20',
   ])('defaults to Tour in development for %j', search => {
     expect(selectPrototype(search, true)).toBe(PROTOTYPES.tour);
   });
 
-  it.each(['?prototype=standard', '?prototype=standard&test=1'])('selects the explicit original comparison for %j', search => {
-    expect(selectPrototype(search, true)).toBeNull();
-  });
+  it.each(['?prototype=standard', '?prototype=standard&test=1'])(
+    'selects the explicit original comparison for %j',
+    search => {
+      expect(selectPrototype(search, true)).toBeNull();
+    },
+  );
 
   it.each([
     ['?prototype=bay&prototype=tour', PROTOTYPES.bay],
@@ -35,12 +52,29 @@ describe('prototype entry policy', () => {
   });
 
   it.each([
-    '', '?test=1', '?prototype', '?prototype=', '?prototype=standard', '?prototype=standard&test=1',
-    '?prototype=bay', '?prototype=station', '?prototype=garden', '?prototype=tour',
-    '?prototype=bay&test=1', '?prototype=station&test=1', '?prototype=garden&test=1', '?prototype=tour&test=1',
-    '?prototype=unknown', '?prototype=Tour', '?prototype=constructor', '?prototype=__proto__', '?prototype=toString',
-    '?prototype=standard&prototype=bay&test=1', '?prototype=bay&prototype=standard',
-    '?prototype=&prototype=standard', '?prototype=__proto__&prototype=garden&test=1',
+    '',
+    '?test=1',
+    '?prototype',
+    '?prototype=',
+    '?prototype=standard',
+    '?prototype=standard&test=1',
+    '?prototype=bay',
+    '?prototype=station',
+    '?prototype=garden',
+    '?prototype=tour',
+    '?prototype=bay&test=1',
+    '?prototype=station&test=1',
+    '?prototype=garden&test=1',
+    '?prototype=tour&test=1',
+    '?prototype=unknown',
+    '?prototype=Tour',
+    '?prototype=constructor',
+    '?prototype=__proto__',
+    '?prototype=toString',
+    '?prototype=standard&prototype=bay&test=1',
+    '?prototype=bay&prototype=standard',
+    '?prototype=&prototype=standard',
+    '?prototype=__proto__&prototype=garden&test=1',
   ])('always selects the official Tour in production for %j', search => {
     expect(selectPrototype(search, false)).toBe(PROTOTYPES.tour);
   });
@@ -98,13 +132,15 @@ describe('prototype record identity', () => {
     expect(saveBest(14, PROTOTYPES.garden.bestScoreKey)).toBe(true);
     expect(saveBest(100, PROTOTYPES.tour.bestScoreKey)).toBe(true);
     expect(saveBest(101, PROTOTYPES.tour.bestScoreKey)).toBe(false);
-    expect(records).toEqual(new Map([
-      ['tiny-planet-courier:best:v1', '67'],
-      ['tiny-planet-courier:bay-leap:best:v1', '12.5'],
-      ['tiny-planet-courier:station:best:v1', '18.5'],
-      ['tiny-planet-courier:garden:best:v1', '14'],
-      ['tiny-planet-courier:tour:best:v1', '100'],
-    ]));
+    expect(records).toEqual(
+      new Map([
+        ['tiny-planet-courier:best:v1', '67'],
+        ['tiny-planet-courier:bay-leap:best:v1', '12.5'],
+        ['tiny-planet-courier:station:best:v1', '18.5'],
+        ['tiny-planet-courier:garden:best:v1', '14'],
+        ['tiny-planet-courier:tour:best:v1', '100'],
+      ]),
+    );
     expect(readBest()).toBe(67);
     expect(readBest(PROTOTYPES.bay.bestScoreKey)).toBe(12.5);
     expect(readBest(PROTOTYPES.station.bestScoreKey)).toBe(18.5);

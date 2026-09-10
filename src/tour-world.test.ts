@@ -1,4 +1,14 @@
-import { AmbientLight, InstancedMesh, Matrix4, Mesh, MeshStandardMaterial, Object3D, Raycaster, RingGeometry, Vector3 } from 'three';
+import {
+  AmbientLight,
+  InstancedMesh,
+  Matrix4,
+  Mesh,
+  MeshStandardMaterial,
+  Object3D,
+  Raycaster,
+  RingGeometry,
+  Vector3,
+} from 'three';
 import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { BAY_LEVEL, BayLevel } from './bay-level';
 import { GARDEN_LEVEL, GardenLevel } from './garden-level';
@@ -7,10 +17,20 @@ import { PLANET_RADIUS as R, spherical, surfaceDistance } from './math';
 import { PlanetWorld } from './world';
 import { createTourConnectorGeometry } from './tour-world-geometry';
 
-const objects = (root: Object3D) => { const result: Object3D[] = []; root.traverse(o => result.push(o)); return result; };
+const objects = (root: Object3D) => {
+  const result: Object3D[] = [];
+  root.traverse(o => result.push(o));
+  return result;
+};
 const meshes = (root: Object3D) => objects(root).filter((o): o is Mesh => o instanceof Mesh);
-const hit = (surfaces: Object3D[], n: Vector3) => new Raycaster(n.clone().multiplyScalar(R + 4), n.clone().negate(), 0, 5).intersectObjects(surfaces, false)[0];
-const sidePoint = (n: Vector3, side: Vector3, distance: number) => n.clone().multiplyScalar(Math.cos(distance / R)).addScaledVector(side, Math.sin(distance / R)).normalize();
+const hit = (surfaces: Object3D[], n: Vector3) =>
+  new Raycaster(n.clone().multiplyScalar(R + 4), n.clone().negate(), 0, 5).intersectObjects(surfaces, false)[0];
+const sidePoint = (n: Vector3, side: Vector3, distance: number) =>
+  n
+    .clone()
+    .multiplyScalar(Math.cos(distance / R))
+    .addScaledVector(side, Math.sin(distance / R))
+    .normalize();
 const arcDistance = (n: Vector3, a: Vector3, b: Vector3) => {
   const axis = a.clone().cross(b);
   const angle = Math.atan2(axis.length(), a.dot(b));
@@ -19,7 +39,10 @@ const arcDistance = (n: Vector3, a: Vector3, b: Vector3) => {
   const projectedAngle = Math.atan2(n.dot(forward), n.dot(a));
   let distance = Math.min(surfaceDistance(n, a), surfaceDistance(n, b));
   if (projectedAngle >= 0 && projectedAngle <= angle) {
-    const closest = a.clone().multiplyScalar(Math.cos(projectedAngle)).addScaledVector(forward, Math.sin(projectedAngle));
+    const closest = a
+      .clone()
+      .multiplyScalar(Math.cos(projectedAngle))
+      .addScaledVector(forward, Math.sin(projectedAngle));
     distance = Math.min(distance, surfaceDistance(n, closest));
   }
   return distance;
@@ -37,9 +60,15 @@ describe('three-stop Tour world', () => {
       world = new PlanetWorld('tour');
       original = new PlanetWorld();
       constructionErrors = [...errors.mock.calls];
-    } finally { errors.mockRestore(); }
+    } finally {
+      errors.mockRestore();
+    }
   });
-  beforeEach(() => { world.resetDelivery(); world.root.rotation.set(0, 0, 0); world.root.updateMatrixWorld(true); });
+  beforeEach(() => {
+    world.resetDelivery();
+    world.root.rotation.set(0, 0, 0);
+    world.root.updateMatrixWorld(true);
+  });
 
   it('constructs all three reanchored districts around one base planet without canvas or batching errors', () => {
     expect(typeof document).toBe('undefined');
@@ -55,9 +84,18 @@ describe('three-stop Tour world', () => {
     expect(world.destinations).toEqual(layout.destinations);
     expect(world.destinations.map(d => d.id)).toEqual(['bakery', 'observatory', 'windmill']);
     expect(layout.stops.map(s => s.level.definition.anchor)).toEqual([
-      { latitude: 20, longitude: 0 }, { latitude: -8, longitude: 125 }, { latitude: 28, longitude: -115 },
+      { latitude: 20, longitude: 0 },
+      { latitude: -8, longitude: 125 },
+      { latitude: 28, longitude: -115 },
     ]);
-    for (const name of ['base-planet', 'planet-atmosphere', 'planet-clouds', 'bay-bakery', 'station-observatory', 'garden-windmill']) {
+    for (const name of [
+      'base-planet',
+      'planet-atmosphere',
+      'planet-clouds',
+      'bay-bakery',
+      'station-observatory',
+      'garden-windmill',
+    ]) {
       expect(objects(world.root).filter(o => o.name === name)).toHaveLength(1);
     }
     expect(world.root.getObjectByName('legacy-windmill')).toBeUndefined();
@@ -67,7 +105,9 @@ describe('three-stop Tour world', () => {
     expect(world.drivingEnvironment!.colliders).toBe(world.colliders);
     for (const stop of layout.stops) {
       expect(world.heightAt(stop.entryPose.normal)).toBe(layout.sampleSurface(stop.entryPose.normal).radius);
-      expect(world.drivingEnvironment!.sampleSurface(stop.destination.normal)).toEqual(layout.sampleSurface(stop.destination.normal));
+      expect(world.drivingEnvironment!.sampleSurface(stop.destination.normal)).toEqual(
+        layout.sampleSurface(stop.destination.normal),
+      );
     }
   });
 
@@ -80,7 +120,10 @@ describe('three-stop Tour world', () => {
       expect(target.position.length()).toBeCloseTo(stop.level.definition.surfaceRadii.road, 12);
       const rings = meshes(target).filter(m => m.geometry instanceof RingGeometry);
       expect(rings).toHaveLength(2);
-      expect((rings[0].geometry as RingGeometry).parameters.outerRadius).toBeCloseTo(0.91 * stop.level.definition.pad.radius / BAY_LEVEL.pad.radius, 12);
+      expect((rings[0].geometry as RingGeometry).parameters.outerRadius).toBeCloseTo(
+        (0.91 * stop.level.definition.pad.radius) / BAY_LEVEL.pad.radius,
+        12,
+      );
       const mailbox = world.root.getObjectByName(`${stop.id}-mailbox`)!;
       expect(mailbox.position.x).toBeCloseTo(stop.level.definition.pad.radius + 0.2, 12);
       expect(world.tourLayout!.isOnConnector(mailbox.getWorldPosition(new Vector3()).normalize(), 0.17)).toBe(false);
@@ -91,9 +134,13 @@ describe('three-stop Tour world', () => {
       const normal = stop.level.toNormal(authored.center.x, authored.center.y);
       expect(building.position.clone().normalize().distanceTo(normal)).toBeLessThan(1e-12);
       const forward = new Vector3(0, 0, 1).transformDirection(building.matrixWorld);
-      const towardPad = stop.destination.normal.clone().addScaledVector(normal, -stop.destination.normal.dot(normal)).normalize();
+      const towardPad = stop.destination.normal
+        .clone()
+        .addScaledVector(normal, -stop.destination.normal.dot(normal))
+        .normalize();
       expect(forward.dot(towardPad)).toBeCloseTo(1, 10);
-      for (const surface of ['land', 'road']) expect(world.root.getObjectByName(`${stop.id}-${surface}`)).toBeInstanceOf(Mesh);
+      for (const surface of ['land', 'road'])
+        expect(world.root.getObjectByName(`${stop.id}-${surface}`)).toBeInstanceOf(Mesh);
     });
     world.setActiveDestination(-1);
     for (const stop of world.tourLayout!.stops) {
@@ -103,7 +150,8 @@ describe('three-stop Tour world', () => {
   });
 
   it('copies earned recovery vectors without changing spawn, reactions or layout checkpoints', () => {
-    const layout = world.tourLayout!, environment = world.drivingEnvironment!;
+    const layout = world.tourLayout!,
+      environment = world.drivingEnvironment!;
     const source = layout.stops[1].deliveredPose;
     const pose = { normal: source.normal.clone(), forward: source.forward.clone() };
     const spawn = environment.spawnPose.normal.clone();
@@ -114,7 +162,8 @@ describe('three-stop Tour world', () => {
     expect(environment.recoveryPose).not.toBe(pose);
     expect(environment.recoveryPose.normal).not.toBe(pose.normal);
     expect(environment.recoveryPose.forward).not.toBe(pose.forward);
-    pose.normal.set(99, 99, 99); pose.forward.set(88, 88, 88);
+    pose.normal.set(99, 99, 99);
+    pose.forward.set(88, 88, 88);
     expect(environment.recoveryPose.normal.equals(source.normal)).toBe(true);
     expect(environment.recoveryPose.forward.equals(source.forward)).toBe(true);
     expect(environment.spawnPose.normal.equals(spawn)).toBe(true);
@@ -129,10 +178,14 @@ describe('three-stop Tour world', () => {
     for (let index = 0; index < 3; index++) {
       const start = world.destinations[index].normal.clone().multiplyScalar(R + 0.6);
       const captured = start.clone();
-      world.startDelivery(start, index); start.set(100, 100, 100);
+      world.startDelivery(start, index);
+      start.set(100, 100, 100);
       world.root.updateMatrixWorld(true);
-      expect(world.root.getObjectByName(parcelNames[index])!.getWorldPosition(new Vector3()).distanceTo(captured)).toBeLessThan(1e-10);
-      for (let future = index + 1; future < 3; future++) expect(world.getDeliveryReactionSnapshot(future).progress).toBe(0);
+      expect(
+        world.root.getObjectByName(parcelNames[index])!.getWorldPosition(new Vector3()).distanceTo(captured),
+      ).toBeLessThan(1e-10);
+      for (let future = index + 1; future < 3; future++)
+        expect(world.getDeliveryReactionSnapshot(future).progress).toBe(0);
       world.update(10, index + 1);
       const snapshot = world.getDeliveryReactionSnapshot(index);
       expect(snapshot.progress).toBe(1);
@@ -144,7 +197,12 @@ describe('three-stop Tour world', () => {
     const initial = completed.map(s => ({ ...s }));
     for (const invalid of [-1, 3, 0.5, NaN, Infinity]) {
       world.startDelivery(new Vector3(1, 0, 0), invalid);
-      expect(world.getDeliveryReactionSnapshot(invalid)).toEqual({ active: false, progress: 0, recipientVisible: false, parcelVisible: false });
+      expect(world.getDeliveryReactionSnapshot(invalid)).toEqual({
+        active: false,
+        progress: 0,
+        recipientVisible: false,
+        parcelVisible: false,
+      });
     }
     expect([0, 1, 2].map(i => world.getDeliveryReactionSnapshot(i))).toEqual(initial);
   });
@@ -156,11 +214,14 @@ describe('three-stop Tour world', () => {
     }
     const snapshots = [0, 1, 2].map(i => world.getDeliveryReactionSnapshot(i));
     expect(snapshots.every(s => s.active && s.progress > 0)).toBe(true);
-    const parcels = ['bay-handoff-parcel', 'station-handoff-parcel', 'garden-handoff-parcel'].map(name => world.root.getObjectByName(name)!);
+    const parcels = ['bay-handoff-parcel', 'station-handoff-parcel', 'garden-handoff-parcel'].map(
+      name => world.root.getObjectByName(name)!,
+    );
     const positions = parcels.map(p => p.position.clone());
     const clouds = world.root.getObjectByName('planet-clouds')!;
     const rotor = world.root.getObjectByName('garden-windmill-rotor')!;
-    const cloudRotation = clouds.rotation.y, rotorRotation = rotor.rotation.z;
+    const cloudRotation = clouds.rotation.y,
+      rotorRotation = rotor.rotation.z;
     world.update(2, 10, true);
     expect([0, 1, 2].map(i => world.getDeliveryReactionSnapshot(i))).toEqual(snapshots);
     parcels.forEach((p, i) => expect(p.position.equals(positions[i])).toBe(true));
@@ -171,10 +232,12 @@ describe('three-stop Tour world', () => {
     world.resetDelivery();
     for (let i = 0; i < 3; i++) {
       const s = world.getDeliveryReactionSnapshot(i);
-      expect(s.progress).toBe(0); expect(s.active).toBe(false);
+      expect(s.progress).toBe(0);
+      expect(s.active).toBe(false);
       // The astronomer/gardener remain outside in their accepted idle poses;
       // only the baker starts hidden behind the closed door.
-      expect(s.recipientVisible).toBe(i !== 0); expect(s.parcelVisible).toBe(false);
+      expect(s.recipientVisible).toBe(i !== 0);
+      expect(s.parcelVisible).toBe(false);
     }
     expect(world.getBayReactionSnapshot().doorOpen).toBe(0);
     expect(world.getDeliveryReactionSnapshot(1).telescopeTurn).toBe(0);
@@ -186,11 +249,15 @@ describe('three-stop Tour world', () => {
     const stationWindow = world.root.getObjectByName('station-warm-window') as Mesh;
     expect(bakeryWindow.material).not.toBe(stationWindow.material);
     const originalMaterials = new Map<MeshStandardMaterial, number>();
-    for (const m of meshes(original.root)) if (m.material instanceof MeshStandardMaterial) originalMaterials.set(m.material, m.material.emissiveIntensity);
-    for (const own of [bakeryWindow.material, stationWindow.material]) expect(originalMaterials.has(own as MeshStandardMaterial)).toBe(false);
+    for (const m of meshes(original.root))
+      if (m.material instanceof MeshStandardMaterial) originalMaterials.set(m.material, m.material.emissiveIntensity);
+    for (const own of [bakeryWindow.material, stationWindow.material])
+      expect(originalMaterials.has(own as MeshStandardMaterial)).toBe(false);
     for (const [name, ancestor] of [
-      ['bay-door', 'bay-bakery-animation'], ['station-telescope', 'station-observatory-animation'],
-      ['garden-recipient', 'garden-recipient-animation'], ['garden-bloom-animation', 'garden-welcome-bed'],
+      ['bay-door', 'bay-bakery-animation'],
+      ['station-telescope', 'station-observatory-animation'],
+      ['garden-recipient', 'garden-recipient-animation'],
+      ['garden-bloom-animation', 'garden-welcome-bed'],
     ]) {
       const child = world.root.getObjectByName(name)!;
       expect(child).toBeDefined();
@@ -217,7 +284,8 @@ describe('three-stop Tour world', () => {
         expect(layout.sampleSurface(p).kind).not.toBe('water');
       }
       for (let i = 1; i < connector.path.length; i += 8) {
-        const a = connector.path[i - 1], b = connector.path[i];
+        const a = connector.path[i - 1],
+          b = connector.path[i];
         const side = a.clone().cross(b).normalize();
         const center = a.clone().add(b).normalize();
         // Very near both boundaries, not merely centreline/metadata checks.
@@ -238,17 +306,23 @@ describe('three-stop Tour world', () => {
     let exactCorridorClearance = Infinity;
     for (const connector of layout.connectors) {
       for (let i = 1; i < connector.path.length; i++) {
-        const a = connector.path[i - 1], b = connector.path[i];
+        const a = connector.path[i - 1],
+          b = connector.path[i];
         // Distance to the entire continuous arc, minus the full lane half-width,
         // also covers round joins and terminal caps between the dense probes.
-        for (const collider of world.colliders) exactCorridorClearance = Math.min(exactCorridorClearance,
-          arcDistance(collider.normal, a, b) - connector.width / 2 - collider.radius);
+        for (const collider of world.colliders)
+          exactCorridorClearance = Math.min(
+            exactCorridorClearance,
+            arcDistance(collider.normal, a, b) - connector.width / 2 - collider.radius,
+          );
         const side = a.clone().cross(b).normalize();
-        for (const center of [a, a.clone().add(b).normalize(), b]) for (const fraction of [-0.5, 0, 0.5]) {
-          const n = sidePoint(center, side, fraction * connector.width);
-          expect(layout.sampleSurface(n).kind).not.toBe('water');
-          for (const collider of world.colliders) leastEdgeClearance = Math.min(leastEdgeClearance, surfaceDistance(n, collider.normal) - collider.radius);
-        }
+        for (const center of [a, a.clone().add(b).normalize(), b])
+          for (const fraction of [-0.5, 0, 0.5]) {
+            const n = sidePoint(center, side, fraction * connector.width);
+            expect(layout.sampleSurface(n).kind).not.toBe('water');
+            for (const collider of world.colliders)
+              leastEdgeClearance = Math.min(leastEdgeClearance, surfaceDistance(n, collider.normal) - collider.radius);
+          }
       }
     }
     // The entire rendered lane is clear of solid collider disks. Vehicle-centre
@@ -257,51 +331,73 @@ describe('three-stop Tour world', () => {
     expect(exactCorridorClearance).toBeGreaterThan(0.2);
     for (const rocks of meshes(world.root).filter((m): m is InstancedMesh => m instanceof InstancedMesh)) {
       for (let i = 0; i < rocks.count; i++) {
-        const matrix = new Matrix4(); rocks.getMatrixAt(i, matrix);
+        const matrix = new Matrix4();
+        rocks.getMatrixAt(i, matrix);
         const position = new Vector3().setFromMatrixPosition(matrix.premultiply(rocks.matrixWorld)).normalize();
         // Instanced decorative rocks have no colliders but must still stay out.
         expect(layout.isInSceneryClearance(position, 0.35)).toBe(false);
       }
     }
-    for (let index = 0; index < 3; index++) for (const variant of ['wide', 'short'] as const) {
-      let clearance = Infinity;
-      for (const n of layout.routeForLeg(index, variant)) for (const collider of world.colliders) clearance = Math.min(clearance, surfaceDistance(n, collider.normal) - collider.radius);
-      expect(clearance, `leg ${index} ${variant}`).toBeGreaterThan(0.34);
-    }
+    for (let index = 0; index < 3; index++)
+      for (const variant of ['wide', 'short'] as const) {
+        let clearance = Infinity;
+        for (const n of layout.routeForLeg(index, variant))
+          for (const collider of world.colliders)
+            clearance = Math.min(clearance, surfaceDistance(n, collider.normal) - collider.radius);
+        expect(clearance, `leg ${index} ${variant}`).toBeGreaterThan(0.34);
+      }
     // Legacy props must not enter any district. These are the real authored
     // colliders, not a separately generated metadata list used as the world.
     const expectedCounts = [1, STATION_LEVEL.obstacles.length + 1, GARDEN_LEVEL.beds.length + 2];
-    layout.stops.forEach((stop, index) => expect(world.colliders.filter(c => stop.level.isInFootprint(c.normal))).toHaveLength(expectedCounts[index]));
+    layout.stops.forEach((stop, index) =>
+      expect(world.colliders.filter(c => stop.level.isInFootprint(c.normal))).toHaveLength(expectedCounts[index]),
+    );
   });
 
   it('does not leave an old road or another district overlay across Bay water', () => {
-    const solids = meshes(world.root).filter(m => m.material instanceof MeshStandardMaterial && !m.material.transparent);
-    for (let x = -1.8; x <= 1.8; x += 0.45) for (const y of [-1, 0, 1]) {
-      const n = world.bayLevel!.toNormal(x, y);
-      expect(world.drivingEnvironment!.sampleSurface(n).kind).toBe('water');
-      const contact = hit(solids, n);
-      expect(contact).toBeDefined();
-      expect(contact.point.length()).toBeLessThan(R + 0.045);
-    }
+    const solids = meshes(world.root).filter(
+      m => m.material instanceof MeshStandardMaterial && !m.material.transparent,
+    );
+    for (let x = -1.8; x <= 1.8; x += 0.45)
+      for (const y of [-1, 0, 1]) {
+        const n = world.bayLevel!.toNormal(x, y);
+        expect(world.drivingEnvironment!.sampleSurface(n).kind).toBe('water');
+        const contact = hit(solids, n);
+        expect(contact).toBeDefined();
+        expect(contact.point.length()).toBeLessThan(R + 0.045);
+      }
     for (const stop of world.tourLayout!.stops) {
       const surfaces = ['land', 'road'].map(name => world.root.getObjectByName(`${stop.id}-${name}`)!);
       const spawn = stop.level.definition.spawn.position;
       for (const n of [stop.level.toNormal(spawn.x + 0.1, spawn.y), stop.destination.normal]) {
-        expect(Math.abs(hit(surfaces, n).point.length() - stop.level.sampleSurface(n).radius), `${stop.id} ${JSON.stringify(stop.level.toLocal(n))}`).toBeLessThan(0.006);
+        expect(
+          Math.abs(hit(surfaces, n).point.length() - stop.level.sampleSurface(n).radius),
+          `${stop.id} ${JSON.stringify(stop.level.toLocal(n))}`,
+        ).toBeLessThan(0.006);
       }
       // At a local road's exact terminal edge the incoming connector cap supplies
       // support too (and avoids a float32 ray miss on that shared boundary).
-      const composite = [...surfaces, ...world.tourLayout!.connectors.map(c => world.root.getObjectByName(`tour-connector-${c.from}-${c.to}`)!)];
-      expect(Math.abs(hit(composite, stop.entryPose.normal).point.length() - world.heightAt(stop.entryPose.normal))).toBeLessThan(0.006);
+      const composite = [
+        ...surfaces,
+        ...world.tourLayout!.connectors.map(c => world.root.getObjectByName(`tour-connector-${c.from}-${c.to}`)!),
+      ];
+      expect(
+        Math.abs(hit(composite, stop.entryPose.normal).point.length() - world.heightAt(stop.entryPose.normal)),
+      ).toBeLessThan(0.006);
     }
   });
 
   it('keeps repeated deliveries, celebrations and splashes bounded', () => {
-    world.splash(world.bayLevel!.toNormal(0, 0)); world.update(3, 3);
-    const count = objects(world.root).length, meshCount = meshes(world.root).length;
+    world.splash(world.bayLevel!.toNormal(0, 0));
+    world.update(3, 3);
+    const count = objects(world.root).length,
+      meshCount = meshes(world.root).length;
     expect(meshCount).toBeLessThan(360);
     expect(count).toBeLessThan(1200);
-    const triangles = meshes(world.root).reduce((total, m) => total + (m.geometry.index?.count ?? m.geometry.getAttribute('position').count) / 3, 0);
+    const triangles = meshes(world.root).reduce(
+      (total, m) => total + (m.geometry.index?.count ?? m.geometry.getAttribute('position').count) / 3,
+      0,
+    );
     expect(triangles).toBeLessThan(250000);
     for (let run = 0; run < 8; run++) {
       world.resetDelivery();
@@ -337,12 +433,15 @@ describe('Tour connector round joins and end caps', () => {
   it('follows a sharp piecewise great-circle bend instead of smoothing or trimming its corridor', () => {
     const level = new BayLevel();
     const path = [level.toNormal(0, 0), level.toNormal(2, 0), level.toNormal(2, 2)];
-    const road = new Mesh(createTourConnectorGeometry({ from: 0, to: 1, width: 1.8, path }), new MeshStandardMaterial());
+    const road = new Mesh(
+      createTourConnectorGeometry({ from: 0, to: 1, width: 1.8, path }),
+      new MeshStandardMaterial(),
+    );
     road.updateMatrixWorld(true);
     for (const index of [0, 2]) {
       const n = path[index];
       const other = path[1];
-      const outward = n.clone().sub(other).addScaledVector(n, -(n.clone().sub(other)).dot(n)).normalize();
+      const outward = n.clone().sub(other).addScaledVector(n, -n.clone().sub(other).dot(n)).normalize();
       expect(hit([road], sidePoint(n, outward, 0.89)), `cap ${index}`).toBeDefined();
     }
     const center = path[1];
@@ -356,7 +455,9 @@ describe('Tour connector round joins and end caps', () => {
     }
     const vertices = road.geometry.getAttribute('position');
     for (let i = 0; i < vertices.count; i += 3) {
-      const centroid = [0, 1, 2].reduce((sum, j) => sum.add(new Vector3().fromBufferAttribute(vertices, i + j)), new Vector3()).divideScalar(3);
+      const centroid = [0, 1, 2]
+        .reduce((sum, j) => sum.add(new Vector3().fromBufferAttribute(vertices, i + j)), new Vector3())
+        .divideScalar(3);
       expect(centroid.length()).toBeGreaterThan(R + 0.082);
     }
   });
@@ -368,7 +469,8 @@ describe('standalone constructor compatibility', () => {
       const world = new PlanetWorld(prototype);
       expect(world.tourLayout).toBeNull();
       if (prototype === false) {
-        expect(world.authoredLevel).toBeNull(); expect(world.drivingEnvironment).toBeNull();
+        expect(world.authoredLevel).toBeNull();
+        expect(world.drivingEnvironment).toBeNull();
         expect(world.destinations).toHaveLength(3);
         expect(world.destinations[0].normal.equals(spherical(30, 28))).toBe(true);
         expect(world.heightAt(spherical(0, 0))).toBe(R + 0.105);

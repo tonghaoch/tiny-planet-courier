@@ -5,19 +5,31 @@ import { TourLayout } from './tour-layout';
 import { TOUR_RECORD_KEY, TourSession } from './tour-session';
 import { spherical } from './math';
 
-const dock = (session: TourSession, index = session.index) => session.update(DELIVERY_HOLD, session.destinations[index].normal, 0);
+const dock = (session: TourSession, index = session.index) =>
+  session.update(DELIVERY_HOLD, session.destinations[index].normal, 0);
 afterEach(() => vi.unstubAllGlobals());
 
 describe('Tour ordered delivery and active splits', () => {
   it('reuses DeliveryRun eligibility and records only the exact returned delivery index once', () => {
     const session = new TourSession();
     const baseline = new DeliveryRun(session.destinations, { keepDrivingOnFinish: true });
-    session.start(); baseline.start();
+    session.start();
+    baseline.start();
     const inputs: [number, number, number, number, boolean][] = [
-      [1, 1, 0, 0, true], [1, 0, 0, 0, false], [1, 0, 0, 0.3, true], [1, 0, 2, 0, true],
-      [NaN, 0, 0, 0, true], [-1, 0, 0, 0, true], [0, 0, 0, 0, true],
-      [0.3, 0, 0, 0, true], [0.3, 0, 0, 0, true], [1, 0, 0, 0, true],
-      [0.6, 1, 0, 0, true], [1, 1, 0, 0, true], [0.6, 2, 0, 0, true], [1, 2, 0, 0, true],
+      [1, 1, 0, 0, true],
+      [1, 0, 0, 0, false],
+      [1, 0, 0, 0.3, true],
+      [1, 0, 2, 0, true],
+      [NaN, 0, 0, 0, true],
+      [-1, 0, 0, 0, true],
+      [0, 0, 0, 0, true],
+      [0.3, 0, 0, 0, true],
+      [0.3, 0, 0, 0, true],
+      [1, 0, 0, 0, true],
+      [0.6, 1, 0, 0, true],
+      [1, 1, 0, 0, true],
+      [0.6, 2, 0, 0, true],
+      [1, 2, 0, 0, true],
     ];
     const delivered: number[] = [];
     for (const [dt, index, speed, altitude, grounded] of inputs) {
@@ -54,9 +66,11 @@ describe('Tour ordered delivery and active splits', () => {
     dock(session);
     expect(session.splits[1].elapsed).toBeCloseTo(4 + DELIVERY_HOLD, 12);
     dock(session);
-    const finished = session.elapsed, splits = session.splits;
+    const finished = session.elapsed,
+      splits = session.splits;
     expect(session.update(100, session.destinations[2].normal, 0)).toBeNull();
-    session.pause(); session.resume();
+    session.pause();
+    session.resume();
     expect(session.mode).toBe('playing');
     expect(session.elapsed).toBe(finished);
     expect(session.splits).toEqual(splits);
@@ -66,7 +80,12 @@ describe('Tour ordered delivery and active splits', () => {
     const setItem = vi.fn();
     vi.stubGlobal('localStorage', { getItem: vi.fn(), setItem });
     const session = new TourSession();
-    session.start(); dock(session); dock(session); dock(session); session.home(); session.start();
+    session.start();
+    dock(session);
+    dock(session);
+    dock(session);
+    session.home();
+    session.start();
     expect(setItem).not.toHaveBeenCalled();
     expect(TOUR_RECORD_KEY).toBe('tiny-planet-courier:tour:best:v1');
   });
@@ -105,15 +124,20 @@ describe('Tour earned recovery points', () => {
 
   it('allows off-road deliveries without entrance visits and protects owned poses and arrays', () => {
     const session = new TourSession();
-    session.start(); dock(session); dock(session); dock(session);
+    session.start();
+    dock(session);
+    dock(session);
+    dock(session);
     expect(session.entryVisited).toEqual([true, false, false]);
     expect(session.finished).toBe(true);
     const checkpoint = session.checkpoint;
     const expected = session.checkpoint;
-    checkpoint.pose.normal.set(0, 0, 0); checkpoint.pose.forward.set(0, 0, 0);
+    checkpoint.pose.normal.set(0, 0, 0);
+    checkpoint.pose.forward.set(0, 0, 0);
     expect(session.checkpoint).toEqual(expected);
     const splits = session.splits as { stopId: string; elapsed: number; cumulative: number }[];
-    splits[0].elapsed = 200; splits.pop();
+    splits[0].elapsed = 200;
+    splits.pop();
     expect(session.splits).toHaveLength(3);
     expect(session.splits[0].elapsed).toBe(DELIVERY_HOLD);
     const visited = session.entryVisited as boolean[];
@@ -130,9 +154,12 @@ describe('Tour earned recovery points', () => {
     const session = new TourSession(layout);
     const environment = layout.createEnvironment([]);
     const drive = new BayDrive(environment);
-    session.start(); dock(session);
+    session.start();
+    dock(session);
     environment.recoveryPose = session.checkpoint.pose;
-    const checkpoint = session.checkpoint, splits = session.splits, time = session.elapsed;
+    const checkpoint = session.checkpoint,
+      splits = session.splits,
+      time = session.elapsed;
     drive.recover();
     expect(drive.normal).toEqual(checkpoint.pose.normal);
     expect(session.index).toBe(1);
@@ -159,9 +186,13 @@ describe('Tour earned recovery points', () => {
   it.each(['partial', 'finished'] as const)('resets every journey field on start and home after a %s run', state => {
     const session = new TourSession();
     const exercise = () => {
-      session.start(); dock(session);
+      session.start();
+      dock(session);
       session.updateLocation(session.layout.stops[1].entryPose.normal, true);
-      if (state === 'finished') { dock(session); dock(session); }
+      if (state === 'finished') {
+        dock(session);
+        dock(session);
+      }
       session.pause();
     };
     const resetState = () => {
@@ -174,8 +205,14 @@ describe('Tour earned recovery points', () => {
       expect(session.currentStop?.id).toBe('bay');
       expect(session.finished).toBe(false);
     };
-    exercise(); session.start(); resetState(); expect(session.mode).toBe('playing');
-    exercise(); session.home(); resetState(); expect(session.mode).toBe('home');
+    exercise();
+    session.start();
+    resetState();
+    expect(session.mode).toBe('playing');
+    exercise();
+    session.home();
+    resetState();
+    expect(session.mode).toBe('home');
     expect(session.update(10, session.destinations[0].normal, 0)).toBeNull();
   });
 });

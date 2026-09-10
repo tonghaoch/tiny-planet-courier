@@ -2,7 +2,14 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { BAY_RECORD_KEY, DeliveryRun, readBest, saveBest } from './game';
 import { spherical, type Destination } from './math';
 
-const bakery: Destination = { id: 'bay-bakery', name: 'Sunrise Bakery', label: 'SUNRISE BAKERY', parcel: 'Warm croissants', normal: spherical(25, 40), color: 0xf6b87b };
+const bakery: Destination = {
+  id: 'bay-bakery',
+  name: 'Sunrise Bakery',
+  label: 'SUNRISE BAKERY',
+  parcel: 'Warm croissants',
+  normal: spherical(25, 40),
+  color: 0xf6b87b,
+};
 const dock = (run: DeliveryRun, grounded = true) => {
   const events = [];
   for (let i = 0; i < 90; i++) {
@@ -63,7 +70,10 @@ describe('one-parcel bay session', () => {
 
   it('keeps bay records separate from the original route', () => {
     const data = new Map<string, string>();
-    vi.stubGlobal('localStorage', { getItem: (key: string) => data.get(key) ?? null, setItem: (key: string, value: string) => data.set(key, value) });
+    vi.stubGlobal('localStorage', {
+      getItem: (key: string) => data.get(key) ?? null,
+      setItem: (key: string, value: string) => data.set(key, value),
+    });
     saveBest(67);
     saveBest(12.5, BAY_RECORD_KEY);
     expect(readBest()).toBe(67);

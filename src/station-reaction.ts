@@ -14,7 +14,9 @@ export class StationDeliveryReaction {
     private readonly telescope: Group,
     private readonly lamp: MeshStandardMaterial,
     private readonly reducedMotion: boolean,
-  ) { this.reset(); }
+  ) {
+    this.reset();
+  }
 
   start(parcelStart: Vector3) {
     this.reset();
@@ -42,7 +44,10 @@ export class StationDeliveryReaction {
   update(dt: number) {
     if (!this.started || this.elapsed >= STATION_LEVEL.reactionDuration || !Number.isFinite(dt) || dt <= 0) return;
     this.elapsed = Math.min(STATION_LEVEL.reactionDuration, this.elapsed + dt);
-    const smooth = (t: number) => { t = MathUtils.clamp(t, 0, 1); return t * t * (3 - 2 * t); };
+    const smooth = (t: number) => {
+      t = MathUtils.clamp(t, 0, 1);
+      return t * t * (3 - 2 * t);
+    };
     const approach = smooth((this.elapsed - 0.15) / 0.7);
     this.recipient.position.set(-0.62 + 0.36 * approach, 0.03, 0.83 + 0.37 * approach);
     const wave = smooth((this.elapsed - 0.6) / 0.3);

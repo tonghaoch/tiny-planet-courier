@@ -14,7 +14,9 @@ export class GardenDeliveryReaction {
     private readonly arm: Group,
     private readonly parcel: Group,
     private readonly reducedMotion: boolean,
-  ) { this.reset(); }
+  ) {
+    this.reset();
+  }
 
   start(parcelStart: Vector3) {
     this.reset();
@@ -42,7 +44,10 @@ export class GardenDeliveryReaction {
   update(dt: number) {
     if (!this.started || this.elapsed >= GARDEN_LEVEL.reactionDuration || !Number.isFinite(dt) || dt <= 0) return;
     this.elapsed = Math.min(GARDEN_LEVEL.reactionDuration, this.elapsed + dt);
-    const smooth = (t: number) => { t = MathUtils.clamp(t, 0, 1); return t * t * (3 - 2 * t); };
+    const smooth = (t: number) => {
+      t = MathUtils.clamp(t, 0, 1);
+      return t * t * (3 - 2 * t);
+    };
     const approach = smooth((this.elapsed - 0.15) / 0.7);
     this.recipient.position.set(-0.52 + 0.28 * approach, 0.03, 0.78 + 0.34 * approach);
     const wave = smooth((this.elapsed - 0.7) / 0.3);

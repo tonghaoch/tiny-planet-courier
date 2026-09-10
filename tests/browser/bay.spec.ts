@@ -1,15 +1,18 @@
+import { localeSnapshot, setPlanetControls, dockAtTarget, bayRoutes } from '../helpers/planet-test';
 import { expect, test, type Page } from '@playwright/test';
 import { Vector3 } from 'three';
 import { createBayPilot } from '../helpers/bay-pilot';
 
 async function snapshot(page: Page) {
-  return page.evaluate(() => (window as any).__planetTest.snapshot());
+  return localeSnapshot(page);
 }
 
 async function loadBay(page: Page) {
   const errors: string[] = [];
   page.on('pageerror', error => errors.push(error.message));
-  page.on('console', message => { if (message.type() === 'error') errors.push(message.text()); });
+  page.on('console', message => {
+    if (message.type() === 'error') errors.push(message.text());
+  });
   await page.goto('/?prototype=bay&test=1');
   await expect(page.locator('#app')).toHaveAttribute('data-ready', 'true');
   await expect(page.locator('#app')).toHaveAttribute('data-prototype', 'bay');
@@ -19,7 +22,7 @@ async function loadBay(page: Page) {
 }
 
 async function driveRoute(page: Page, shortcut: boolean) {
-  const data = await page.evaluate(() => (window as any).__planetTest.routes());
+  const data = await bayRoutes(page);
   const route = (shortcut ? data.jump : data.safe).map((point: number[]) => new Vector3().fromArray(point));
   const pilot = createBayPilot(route, new Vector3().fromArray(data.destination), shortcut);
   const deadline = Date.now() + 35000;
@@ -27,12 +30,22 @@ async function driveRoute(page: Page, shortcut: boolean) {
   while (Date.now() < deadline) {
     const state = await snapshot(page);
     if (state.finished) {
-      await page.evaluate(() => (window as any).__planetTest.setControls(null));
+      await setPlanetControls(page, null);
       return state;
     }
-    const controls = pilot({ ...state, normal: new Vector3().fromArray(state.normal), forward: new Vector3().fromArray(state.forward) });
-    await page.evaluate(value => (window as any).__planetTest.setControls(value), controls);
-    if (shortcut && !flightCaptured && state.phase === 'airborne' && Math.abs(state.local.x) < 1 && state.landingGuideVisible) {
+    const controls = pilot({
+      ...state,
+      normal: new Vector3().fromArray(state.normal),
+      forward: new Vector3().fromArray(state.forward),
+    });
+    await setPlanetControls(page, controls);
+    if (
+      shortcut &&
+      !flightCaptured &&
+      state.phase === 'airborne' &&
+      Math.abs(state.local.x) < 1 &&
+      state.landingGuideVisible
+    ) {
       await page.screenshot({ path: 'artifacts/bay-flight.png' });
       flightCaptured = true;
     }
@@ -64,7 +77,7 @@ test('both real driven routes deliver, with a non-blocking bakery reaction', asy
   expect(delivered.reaction.windowGlow).toBeGreaterThan(1);
   expect(delivered.drawCalls).toBeLessThan(400);
   await page.screenshot({ path: 'artifacts/bay-delivered.png' });
-  await page.evaluate(() => (window as any).__planetTest.setControls({ throttle: 1, steer: 0.5, boost: false }));
+  await setPlanetControls(page, { throttle: 1, steer: 0.5, boost: false });
   await page.waitForTimeout(500);
   const moving = await snapshot(page);
   expect(moving.normal).not.toEqual(delivered.normal);
@@ -79,7 +92,9 @@ test('both real driven routes deliver, with a non-blocking bakery reaction', asy
   expect(jump.elapsed).toBeLessThan(road.elapsed);
   await expect(page.locator('#bay-result')).toBeVisible();
   expect(errors).toEqual([]);
-  console.log(`Bay route times: coast ${road.elapsed.toFixed(2)}s, leap ${jump.elapsed.toFixed(2)}s; both physically driven.`);
+  console.log(
+    `Bay route times: coast ${road.elapsed.toFixed(2)}s, leap ${jump.elapsed.toFixed(2)}s; both physically driven.`,
+  );
 });
 
 test('keyboard boost still works after enabling sound and shows the landing guide', async ({ page }) => {
@@ -90,8 +105,10 @@ test('keyboard boost still works after enabling sound and shows the landing guid
   await page.keyboard.down('KeyW');
   await page.keyboard.down('Space');
   await page.waitForFunction(() => {
-    const state = (window as any).__planetTest.snapshot();
-    return state.phase === 'airborne' && Math.abs(state.local.x) < 0.8 && state.landingGuideVisible;
+    const bridge = window.__planetTest;
+    if (!bridge) throw new Error('Planet test bridge missing; load a DEV page with ?test=1.');
+    const state = bridge.snapshot();
+    return state.phase === 'airborne' && Math.abs(state.local!.x) < 0.8 && state.landingGuideVisible;
   });
   const airborne = await snapshot(page);
   expect(airborne.jumps).toBe(1);
@@ -114,7 +131,9 @@ test('an unboosted splash recovers quickly with the parcel intact', async ({ pag
   const errors = await loadBay(page);
   await page.getByRole('button', { name: 'Start delivering' }).click();
   await page.keyboard.down('KeyW');
-  await expect.poll(async () => (await snapshot(page)).recoveries, { timeout: 12000, intervals: [80, 100, 150] }).toBe(1);
+  await expect
+    .poll(async () => (await snapshot(page)).recoveries, { timeout: 12000, intervals: [80, 100, 150] })
+    .toBe(1);
   await page.keyboard.up('KeyW');
   const recovered = await snapshot(page);
   expect(recovered.events).toContain('splash');
@@ -130,7 +149,11 @@ test('an unboosted splash recovers quickly with the parcel intact', async ({ pag
 });
 
 test('small-phone results keep touch driving available and the reaction can pause', async ({ browser }) => {
-  const context = await browser.newContext({ baseURL: 'http://127.0.0.1:5173', viewport: { width: 320, height: 640 }, hasTouch: true });
+  const context = await browser.newContext({
+    baseURL: 'http://127.0.0.1:5173',
+    viewport: { width: 320, height: 640 },
+    hasTouch: true,
+  });
   const page = await context.newPage();
   try {
     const errors = await loadBay(page);
@@ -139,15 +162,18 @@ test('small-phone results keep touch driving available and the reaction can paus
     const cdp = await context.newCDPSession(page);
     const gas = await page.getByRole('button', { name: 'Drive forward', exact: true }).boundingBox();
     const left = await page.getByRole('button', { name: 'Turn left', exact: true }).boundingBox();
-    await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [
-      { x: gas!.x + gas!.width / 2, y: gas!.y + gas!.height / 2, id: 0 },
-      { x: left!.x + left!.width / 2, y: left!.y + left!.height / 2, id: 1 },
-    ] });
+    await cdp.send('Input.dispatchTouchEvent', {
+      type: 'touchStart',
+      touchPoints: [
+        { x: gas!.x + gas!.width / 2, y: gas!.y + gas!.height / 2, id: 0 },
+        { x: left!.x + left!.width / 2, y: left!.y + left!.height / 2, id: 1 },
+      ],
+    });
     await page.waitForTimeout(450);
     expect((await snapshot(page)).speed).toBeGreaterThan(0.5);
     await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
     // The two routes are driven in the first test; this fixture isolates handoff/UI behavior.
-    await page.evaluate(() => (window as any).__planetTest.dockAtTarget());
+    await dockAtTarget(page);
     await expect.poll(async () => (await snapshot(page)).finished).toBe(true);
     await page.getByRole('button', { name: 'Pause game' }).tap();
     const before = (await snapshot(page)).reaction.progress;
@@ -164,9 +190,10 @@ test('small-phone results keep touch driving available and the reaction can paus
     expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(320);
     await page.screenshot({ path: 'artifacts/bay-delivered-mobile.png' });
     const time = (await snapshot(page)).elapsed;
-    await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [
-      { x: gas!.x + gas!.width / 2, y: gas!.y + gas!.height / 2, id: 0 },
-    ] });
+    await cdp.send('Input.dispatchTouchEvent', {
+      type: 'touchStart',
+      touchPoints: [{ x: gas!.x + gas!.width / 2, y: gas!.y + gas!.height / 2, id: 0 }],
+    });
     await page.waitForTimeout(550);
     expect((await snapshot(page)).speed).toBeGreaterThan(1);
     expect((await snapshot(page)).elapsed).toBe(time);
@@ -179,5 +206,7 @@ test('small-phone results keep touch driving available and the reaction can paus
     expect(retry.reaction.progress).toBe(0);
     expect(retry.reaction.windowGlow).toBeCloseTo(0.2);
     expect(errors).toEqual([]);
-  } finally { await context.close(); }
+  } finally {
+    await context.close();
+  }
 });

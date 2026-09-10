@@ -1,10 +1,24 @@
 import * as THREE from 'three';
 import { BayDrive } from './bay-driving';
 import type { BayDriveEvent, BayEnvironment, LandingPrediction } from './bay-types';
-import { advanceOnSphere, PLANET_RADIUS, START_FORWARD, START_NORMAL, surfaceDistance, tangent, UP, type Collider } from './math';
+import {
+  advanceOnSphere,
+  PLANET_RADIUS,
+  START_FORWARD,
+  START_NORMAL,
+  surfaceDistance,
+  tangent,
+  UP,
+  type Collider,
+} from './math';
 
-export interface Controls { throttle: number; steer: number; boost: boolean; }
-const mat = (color: number, extra: THREE.MeshStandardMaterialParameters = {}) => new THREE.MeshStandardMaterial({ color, roughness: 0.7, flatShading: true, ...extra });
+export interface Controls {
+  throttle: number;
+  steer: number;
+  boost: boolean;
+}
+const mat = (color: number, extra: THREE.MeshStandardMaterialParameters = {}) =>
+  new THREE.MeshStandardMaterial({ color, roughness: 0.7, flatShading: true, ...extra });
 
 export class Vehicle {
   readonly root = new THREE.Group();
@@ -32,13 +46,23 @@ export class Vehicle {
   readonly drive: BayDrive | null;
   private readonly landingMarker = new THREE.Group();
   private readonly unsafeMarker = new THREE.Group();
-  private readonly markerMaterial = new THREE.MeshBasicMaterial({ color: 0xffe3ac, transparent: true, opacity: 0.82, depthWrite: false, side: THREE.DoubleSide });
+  private readonly markerMaterial = new THREE.MeshBasicMaterial({
+    color: 0xffe3ac,
+    transparent: true,
+    opacity: 0.82,
+    depthWrite: false,
+    side: THREE.DoubleSide,
+  });
   private readonly airShadow = new THREE.Group();
   private predictionClock = 0;
   private prediction: LandingPrediction | null = null;
   private visualTime = 0;
 
-  constructor(scene: THREE.Scene, environment: BayEnvironment | null = null, private readonly reducedMotion = false) {
+  constructor(
+    scene: THREE.Scene,
+    environment: BayEnvironment | null = null,
+    private readonly reducedMotion = false,
+  ) {
     this.drive = environment ? new BayDrive(environment) : null;
     const cream = mat(0xf8ebcf);
     const orange = mat(0xf29569);
@@ -46,7 +70,14 @@ export class Vehicle {
     const glass = mat(0x69a7ab, { metalness: 0.28, roughness: 0.3 });
     const rubber = mat(0x2d3536);
     const metal = mat(0xe5d8bf, { metalness: 0.25 });
-    const box = (x: number, y: number, z: number, material: THREE.Material, position: number[], parent: THREE.Object3D = this.body) => {
+    const box = (
+      x: number,
+      y: number,
+      z: number,
+      material: THREE.Material,
+      position: number[],
+      parent: THREE.Object3D = this.body,
+    ) => {
       const mesh = new THREE.Mesh(new THREE.BoxGeometry(x, y, z), material);
       mesh.position.set(position[0], position[1], position[2]);
       mesh.castShadow = true;
@@ -56,7 +87,7 @@ export class Vehicle {
     };
     box(0.62, 0.12, 1.1, dark, [0, 0.21, 0]);
     box(0.66, 0.39, 0.72, cream, [0, 0.44, -0.16]);
-    box(0.64, 0.32, 0.40, orange, [0, 0.37, 0.39]);
+    box(0.64, 0.32, 0.4, orange, [0, 0.37, 0.39]);
     box(0.62, 0.33, 0.39, cream, [0, 0.63, 0.24]);
     const windshield = box(0.54, 0.23, 0.028, glass, [0, 0.64, 0.443]);
     windshield.rotation.x = -0.08;
@@ -70,16 +101,16 @@ export class Vehicle {
     box(0.68, 0.07, 0.07, metal, [0, 0.24, -0.57]);
     const light = mat(0xffe9ad, { emissive: 0xffd494, emissiveIntensity: 0.7 });
     for (const x of [-0.22, 0.22]) {
-      box(0.14, 0.10, 0.025, light, [x, 0.43, 0.6]);
+      box(0.14, 0.1, 0.025, light, [x, 0.43, 0.6]);
       box(0.08, 0.09, 0.028, mat(0xd87861), [x, 0.42, -0.532]);
     }
     box(0.21, 0.08, 0.02, dark, [0, 0.35, 0.603]);
-    box(0.40, 0.06, 0.07, dark, [0, 0.85, -0.2]);
-    box(0.40, 0.06, 0.07, dark, [0, 0.85, 0.19]);
+    box(0.4, 0.06, 0.07, dark, [0, 0.85, -0.2]);
+    box(0.4, 0.06, 0.07, dark, [0, 0.85, 0.19]);
     this.parcel.position.set(0, 0.97, -0.1);
     box(0.35, 0.24, 0.35, mat(0xc99c6b), [0, 0, 0], this.parcel);
     box(0.075, 0.25, 0.36, cream, [0, 0, 0], this.parcel);
-    box(0.17, 0.10, 0.006, cream, [0.07, 0, 0.18], this.parcel);
+    box(0.17, 0.1, 0.006, cream, [0.07, 0, 0.18], this.parcel);
     this.body.add(this.parcel);
     for (let i = 1; i < 3; i++) {
       const extra = this.parcel.clone(true);
@@ -90,13 +121,13 @@ export class Vehicle {
     for (const x of [-0.35, 0.35]) {
       for (const z of [-0.36, 0.38]) {
         const axle = new THREE.Group();
-        axle.position.set(x, 0.20, z);
+        axle.position.set(x, 0.2, z);
         const wheel = new THREE.Group();
         const tire = new THREE.Mesh(new THREE.CylinderGeometry(0.19, 0.19, 0.14, 12), rubber);
         tire.rotation.z = Math.PI / 2;
         tire.castShadow = true;
         wheel.add(tire);
-        const cap = new THREE.Mesh(new THREE.CylinderGeometry(0.10, 0.10, 0.145, 12), metal);
+        const cap = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.1, 0.145, 12), metal);
         cap.rotation.z = Math.PI / 2;
         wheel.add(cap);
         axle.add(wheel);
@@ -110,7 +141,10 @@ export class Vehicle {
     scene.add(this.root);
     const dustGeo = new THREE.IcosahedronGeometry(0.12, 0);
     for (let i = 0; i < 24; i++) {
-      const puff = new THREE.Mesh(dustGeo, new THREE.MeshBasicMaterial({ color: 0xf5d9aa, transparent: true, opacity: 0, depthWrite: false }));
+      const puff = new THREE.Mesh(
+        dustGeo,
+        new THREE.MeshBasicMaterial({ color: 0xf5d9aa, transparent: true, opacity: 0, depthWrite: false }),
+      );
       puff.visible = false;
       scene.add(puff);
       this.dust.push(puff);
@@ -121,14 +155,14 @@ export class Vehicle {
   }
 
   private createLandingGuide(scene: THREE.Scene) {
-    const ring = new THREE.Mesh(new THREE.RingGeometry(0.53, 0.60, 40), this.markerMaterial);
+    const ring = new THREE.Mesh(new THREE.RingGeometry(0.53, 0.6, 40), this.markerMaterial);
     ring.rotation.x = -Math.PI / 2;
     this.landingMarker.add(ring);
     const dot = new THREE.Mesh(new THREE.CircleGeometry(0.12, 20), this.markerMaterial);
     dot.rotation.x = -Math.PI / 2;
     this.landingMarker.add(dot);
     for (const angle of [-Math.PI / 4, Math.PI / 4]) {
-      const bar = new THREE.Mesh(new THREE.BoxGeometry(0.60, 0.015, 0.045), this.markerMaterial);
+      const bar = new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.015, 0.045), this.markerMaterial);
       bar.rotation.y = angle;
       bar.position.y = 0.025;
       this.unsafeMarker.add(bar);
@@ -136,7 +170,10 @@ export class Vehicle {
     this.landingMarker.add(this.unsafeMarker);
     this.landingMarker.visible = false;
     scene.add(this.landingMarker);
-    const shadow = new THREE.Mesh(new THREE.CircleGeometry(0.36, 24), new THREE.MeshBasicMaterial({ color: 0x173e39, transparent: true, opacity: 0.24, depthWrite: false }));
+    const shadow = new THREE.Mesh(
+      new THREE.CircleGeometry(0.36, 24),
+      new THREE.MeshBasicMaterial({ color: 0x173e39, transparent: true, opacity: 0.24, depthWrite: false }),
+    );
     shadow.rotation.x = -Math.PI / 2;
     shadow.scale.y = 1.5;
     this.airShadow.add(shadow);
@@ -155,23 +192,34 @@ export class Vehicle {
     this.steerVisual = this.drive.steer;
   }
 
-  get cargoVisible() { return this.cargoCount > 0; }
-  get cargoCount() { return this.parcels.filter(parcel => parcel.visible).length; }
-  get landingGuideVisible() { return this.landingMarker.visible; }
+  get cargoVisible() {
+    return this.cargoCount > 0;
+  }
+  get cargoCount() {
+    return this.parcels.filter(parcel => parcel.visible).length;
+  }
+  get landingGuideVisible() {
+    return this.landingMarker.visible;
+  }
 
   /** Select the small Tour rack or the original single parcel; refill on a fresh run. */
   setCargoCapacity(capacity: 1 | 3) {
     this.cargoCapacity = capacity;
     this.parcels.forEach((parcel, i) => {
       parcel.scale.setScalar(capacity === 3 ? 0.62 : 1);
-      parcel.position.set(capacity === 3 ? [-0.17, 0.17, 0][i] : 0, 0.97,
-        capacity === 3 ? [-0.21, -0.21, 0.12][i] : -0.1);
+      parcel.position.set(
+        capacity === 3 ? [-0.17, 0.17, 0][i] : 0,
+        0.97,
+        capacity === 3 ? [-0.21, -0.21, 0.12][i] : -0.1,
+      );
     });
     this.setCargoVisible(true);
   }
 
   setCargoVisible(visible: boolean) {
-    this.parcels.forEach((parcel, i) => { parcel.visible = visible && i < this.cargoCapacity; });
+    this.parcels.forEach((parcel, i) => {
+      parcel.visible = visible && i < this.cargoCapacity;
+    });
   }
 
   getParcelWorldPosition(): THREE.Vector3 {
@@ -216,7 +264,10 @@ export class Vehicle {
     this.root.visible = true;
     this.drive?.reset();
     this.pullDriveState();
-    this.dust.forEach((puff, i) => { puff.visible = false; this.dustLives[i] = 0; });
+    this.dust.forEach((puff, i) => {
+      puff.visible = false;
+      this.dustLives[i] = 0;
+    });
     this.syncVisual(0, 0);
   }
 
@@ -244,7 +295,10 @@ export class Vehicle {
       if (events.some(event => event.type === 'recovered')) {
         this.prediction = null;
         this.predictionClock = 0;
-        this.dust.forEach((puff, i) => { puff.visible = false; this.dustLives[i] = 0; });
+        this.dust.forEach((puff, i) => {
+          puff.visible = false;
+          this.dustLives[i] = 0;
+        });
       }
       return events;
     }
@@ -311,20 +365,30 @@ export class Vehicle {
     time = this.visualTime;
     const prototype = this.drive;
     this.root.visible = prototype?.phase !== 'recovering';
-    this.root.position.copy(this.normal).multiplyScalar(prototype ? prototype.contactRadius - 0.01 : PLANET_RADIUS + 0.105 + this.altitude);
+    this.root.position
+      .copy(this.normal)
+      .multiplyScalar(prototype ? prototype.contactRadius - 0.01 : PLANET_RADIUS + 0.105 + this.altitude);
     const right = new THREE.Vector3().crossVectors(this.normal, this.forward).normalize();
     this.matrix.makeBasis(right, this.normal, this.forward);
     this.root.quaternion.setFromRotationMatrix(this.matrix);
     if (prototype) {
       const motionScale = this.reducedMotion ? 0.3 : 1;
       const airborne = prototype.phase === 'airborne';
-      const pitch = airborne ? -Math.atan2(prototype.radialSpeed, Math.abs(this.speed) + 0.1) : -prototype.groundPitch - THREE.MathUtils.clamp(prototype.acceleration * 0.005, -0.055, 0.055) * motionScale;
+      const pitch = airborne
+        ? -Math.atan2(prototype.radialSpeed, Math.abs(this.speed) + 0.1)
+        : -prototype.groundPitch - THREE.MathUtils.clamp(prototype.acceleration * 0.005, -0.055, 0.055) * motionScale;
       this.body.rotation.x = THREE.MathUtils.damp(this.body.rotation.x, pitch, 11, dt);
-      this.body.rotation.z = THREE.MathUtils.damp(this.body.rotation.z, -this.steerVisual * this.speed * 0.022 * motionScale, 9, dt);
+      this.body.rotation.z = THREE.MathUtils.damp(
+        this.body.rotation.z,
+        -this.steerVisual * this.speed * 0.022 * motionScale,
+        9,
+        dt,
+      );
       this.body.position.y = -prototype.impact * 0.065 * motionScale;
       this.parcel.position.y = 0.97 + prototype.impact * 0.13 * motionScale;
-      this.parcel.rotation.z = (Math.sin(time * 8) * Math.abs(this.speed) * 0.006 + this.body.rotation.z * 0.2) * motionScale;
-      this.axles.forEach(axle => axle.position.y = 0.20 - this.body.position.y);
+      this.parcel.rotation.z =
+        (Math.sin(time * 8) * Math.abs(this.speed) * 0.006 + this.body.rotation.z * 0.2) * motionScale;
+      this.axles.forEach(axle => (axle.position.y = 0.2 - this.body.position.y));
       this.updateLandingGuide(dt);
     } else {
       this.body.rotation.z = -this.steerVisual * this.speed * 0.022;
@@ -335,14 +399,18 @@ export class Vehicle {
       parcel.position.y = this.parcel.position.y;
       parcel.rotation.z = this.parcel.rotation.z;
     });
-    this.wheels.forEach(wheel => wheel.rotation.x += this.speed * dt / 0.19);
-    this.frontWheels.forEach(axle => axle.rotation.y = -this.steerVisual * 0.35);
+    this.wheels.forEach(wheel => (wheel.rotation.x += (this.speed * dt) / 0.19));
+    this.frontWheels.forEach(axle => (axle.rotation.y = -this.steerVisual * 0.35));
     this.trailClock += dt;
     const grounded = prototype ? prototype.phase === 'grounded' : this.altitude < 0.1;
     if (grounded && this.speed > 1.5 && this.trailClock > (this.boosting ? 0.035 : 0.09)) {
       this.trailClock = 0;
       const i = this.dustCursor++ % this.dust.length;
-      this.dust[i].position.copy(this.root.position).addScaledVector(this.forward, -0.7).addScaledVector(right, Math.sin(time * 81) * 0.22).addScaledVector(this.normal, 0.17);
+      this.dust[i].position
+        .copy(this.root.position)
+        .addScaledVector(this.forward, -0.7)
+        .addScaledVector(right, Math.sin(time * 81) * 0.22)
+        .addScaledVector(this.normal, 0.17);
       this.dust[i].visible = true;
       this.dustLives[i] = 0.7;
       (this.dust[i].material as THREE.MeshBasicMaterial).color.setHex(this.boosting ? 0xffc68a : 0xe5d5ad);

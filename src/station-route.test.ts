@@ -5,13 +5,19 @@ import { PlanetWorld } from './world';
 import { createBayPilot } from '../tests/helpers/bay-pilot';
 
 let world: PlanetWorld;
-beforeAll(() => { world = new PlanetWorld('station'); });
+beforeAll(() => {
+  world = new PlanetWorld('station');
+});
 
 function driveRoute(route: 'outer' | 'inner') {
   const level = world.stationLevel!;
   const drive = new BayDrive(world.drivingEnvironment!);
   const run = new DeliveryRun(world.destinations, { keepDrivingOnFinish: true });
-  const pilot = createBayPilot(route === 'outer' ? level.outerRoute : level.innerRoute, level.destination.normal, false);
+  const pilot = createBayPilot(
+    route === 'outer' ? level.outerRoute : level.innerRoute,
+    level.destination.normal,
+    false,
+  );
   let collisions = 0;
   const visited: { x: number; y: number }[] = [];
   run.start();
@@ -51,7 +57,9 @@ describe('actual Station routes using only driving inputs', () => {
     const drive = new BayDrive(world.drivingEnvironment!);
     let collision = false;
     for (let i = 0; i < 120 * 5; i++) {
-      collision ||= drive.update(1 / 120, { throttle: 1, steer: 0, boost: true }).some(event => event.type === 'collision');
+      collision ||= drive
+        .update(1 / 120, { throttle: 1, steer: 0, boost: true })
+        .some(event => event.type === 'collision');
       if (collision) break;
     }
     expect(collision).toBe(true);

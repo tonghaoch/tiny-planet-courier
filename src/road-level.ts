@@ -21,9 +21,20 @@ export class RoadLevel extends AuthoredLevel {
     this.innerRoute = this.route(course.innerRouteCenterline);
   }
 
-  navigation(normal: Vector3, previous: RoadRoute | null, context: NavigationContext = {}): BranchNavigation<RoadRoute> {
-    return branchNavigation(normal, previous, context,
-      { inner: this.innerRoute, outer: this.outerRoute }, ['inner', 'outer'],
-      this.toNormal(this.course.fork.x, this.course.fork.y), this.spawnPose.normal, this.destination.normal);
+  navigation(
+    normal: Vector3,
+    previous: RoadRoute | null,
+    context: NavigationContext = {},
+  ): BranchNavigation<RoadRoute> {
+    return branchNavigation(
+      normal,
+      previous,
+      context,
+      { inner: this.innerRoute, outer: this.outerRoute },
+      ['inner', 'outer'],
+      this.toNormal(this.course.fork.x, this.course.fork.y),
+      this.spawnPose.normal,
+      this.destination.normal,
+    );
   }
 }
