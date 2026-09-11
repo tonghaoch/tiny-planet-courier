@@ -1,6 +1,106 @@
 # Tiny Planet Courier — iteration plan and handoff
 
-## Engineering release checkpoint — 2026-09-10
+## Five-location release checkpoint — 2026-09-11
+
+**Owner-authorized main publication and README/screenshot refresh.** After accepting the preview visuals, the owner explicitly requested on 2026-09-11: “很好，帮我发布到main，记得更新README和截图” (“Great, publish it to main, and remember to update README and screenshots”). This supersedes the earlier local-only/no-release boundary. It does not claim the owner personally completed all ten deliveries, and no further owner-approval gate is required.
+
+Local validation was recorded on `feat/five-location-tour`, based on released engineering baseline `d5a7985`; the feature was uncommitted and unpublished at that stage. The primary owns committing the verified feature and release assets on the feature branch, fast-forwarding `main`, pushing without force, monitoring Actions/Pages for the **exact pushed SHA**, and independently smoke-testing the public site. These publication checks remain to be confirmed in the primary's release report; no release SHA or successful remote outcome is invented here.
+
+The four maintained documents now describe the five-location release, and the two README JPEGs have been refreshed from the unchanged production preview; see [capture provenance](#five-location-screenshot-provenance--2026-09-11). Earlier accepted routes, validations and screenshot records below remain historical evidence.
+
+### Five-location local checkpoint — 2026-09-11
+
+The following preserves the pre-release local validation and its exact evidence boundaries.
+
+Five physical sites now support ten immutable delivery occurrences: two shuffled bags, exactly two visits each, no repeat of either prior two destinations and no repeated directed delivery pair. Beacon Post (replacement lamp) and Redrock Depot (repair supplies) extend southern space while preserving the three accepted courses, Tour anchors, radius 15 and driving tuning. The authored graph retains Bay→Station→Garden→Bay and adds Station→Depot→Beacon→Station; it is not a traffic restriction. Transit follows safe ground routes, not a reverse Bay leap. The compass targets the active destination; free driving remains.
+
+Home/new Tour offers a fresh random draw, not a guaranteed unique route; Start/Restart reuses the exact plan. Ten roof parcels, site-local repeat reactions, per-leg earned recovery, occurrence-bearing splits and itinerary-specific bests replace the old fixed three-stop session. Ten completions freeze scoring but leave driving available. Native collapsed result details support bounded scroll and compact layouts. See the [current Tour contract](tour-plan.md#current-five-location-ten-delivery-contract) and [architecture](architecture.md) for identity, record-key, builders, scene/bundle measurements and approved caps. No new runtime dependencies; the browser RAF driver is test-only.
+
+### Final primary-verified observations
+
+**The following results were supplied by the primary; the documentation worker did not run these commands or suites.** Application/tests/config/budgets/build were frozen before this release-documentation pass; only the four maintained docs and two README JPEGs change afterward.
+
+| Check | Accepted observation on the final candidate |
+| --- | --- |
+| Full `npm run verify` | Format, lint, all-project typecheck; **487 Vitest tests in 35 files**; **11 Node bundle-audit tests**; production build; all bundle/DEV-marker/manifest-DAG checks passed. |
+| DEV browser coverage | **All 104 DISTINCT cases have passing observations on ONE unchanged candidate across sequential fresh-process groups. Not one successful 104/104 invocation.** Standalone **16**, navigation **24**, Tour **9 + isolated recovery 1**; UI desktop welcome **15**, mobile welcome **15**, other UI **17**, ten-stop desktop **2**, phone/native touch **3**, landscape **2**. No skips or retry configuration. |
+| Subsequent production coverage | **24/24 passed in 50.8s**, sequentially after DEV. An ignored temporary equivalent config used **4175**, leaving the user's existing **4173** preview running. This was not the normal `npm run test:preview` command running on 4175. |
+| Frozen-run integrity | SHA256 verified **123 source/config/build files unchanged** across accepted observations. Documentation changes follow this freeze. |
+| Production isolation and lifecycle | Default/query isolation, controlled seed-override isolation, real keyboard/pointer lifecycle and absence of the bridge passed. Production ignores all prototype/test/seed overrides. |
+
+Ignored inventories `artifacts/five-location-tour/final-browser-inventory-1.json` and `remaining-browser-inventory-2.json` establish full/no-overlap group coverage; `final-browser-inventory-1.json` records the complete 104-case inventory, and `remaining-browser-inventory-2.json` records the 54-case UI subdivision. These local records do not transfer with Git and are not new documentation assets.
+
+**Real-controller route evidence:** simulation used actual World colliders for all **20 ordered site pairs**, all five spawn departures, new alternatives, full ten-stop seeds **0/1** and old routes. Browser natural-start wide **seed 9** and short **seed 55** both completed ten handoffs plus Garden→Bay closing; short made **two real jumps**. Navigation **seed 227** completed ten deliveries. These route proofs used no teleport or physics mutation. Docking fixtures establish UI/state only, not driveability.
+
+**Independent production smoke:** the existing **http://127.0.0.1:4173/tiny-planet-courier/** passed desktop **1440×900** and touch **320×640** observations: HTTP 200, ten-parcel welcome/Start, real W/touch movement, pause/retry first-target consistency, no bridge or page errors. The owner then said it looks good. This smoke is not a full production playthrough or owner ten-delivery completion.
+
+**Measured output:** app `index-wODMr3ZV.js` **138,273 raw / 43,973 gzip(level 9)**; core `three-core-Y9dRlxmZ.js` **217,287 / 58,893**; renderer `three-renderer-Dre_LhAp.js` **343,816 / 82,669**. Total **699,376 / 185,535**, approximately **+1.85% raw / +2.10% gzip** against `d5a7985` (**686,679 / 181,714**). Both engine hashes are unchanged; this is added functionality, **not a cold-byte reduction or measured startup-speed win**. The owner explicitly approved new-feature totals **raw ≤715,000 / gzip ≤190,000**, with each file still **strictly <500,000**. Other audits remain intact; the old original+2% cap is not current policy. Do not silently increase thresholds.
+
+### Brief failure and repair history
+
+- **Initial full DEV: 97/104 in 34.1 minutes**, with three transit collisions and four UI failures; the then-current **121-file source/build freeze held**. This is not the accepted final result.
+- Traces/control replay located a common Station planter. A Node simulation with **133ms input refresh + 33ms delay** reproduced impacts; **60/30Hz** feedback passed. Moving the **test-only** shared driver to page RAF yielded median **16.67ms** feedback and roughly **0.5–0.7ms** snapshot sampling; all original three reproductions then passed with the same game, geometry and collision assertions. Uniform-delay simulation is not exact original trace replay; local planar clearance is diagnostic, not a formal global/any-FPS guarantee.
+- Expanded mobile results previously covered the van. Compact native disclosure reduced portrait expanded height **317.8→187px**: card bottom **277px**, van starts **294.44px**. Short-landscape restart clipping was also fixed. Native swipe reached the final split, preserving van/recipient/controls, 12px result text and 44px targets. The new serial ten-animation UI family budget changed **45→90s** for its added scope; old global/per-step limits and geometry thresholds were not lowered. Full-route aggregate deadlines grew for ten legs; per-leg limits stayed.
+- An expiring-toast check/use race was repaired with atomic visibility/rectangle sampling. A long-copy fixture had accidentally reactivated navigation by calling `setDestinations` after finishing; it now uses one completed ten-stop session and `ui.update` before results. This fixture repair is not an application design change.
+- Long Windows sessions showed localhost/module-load stalls: a recovery case spent **84.019s in `page.goto`**, exhausting the **120s** total. The unchanged isolated fresh-server/browser case passed in **15.3s**; earlier traces also showed **48.6s** page loads. Fresh-process groups produced complete passing coverage, but **no permanent fix for all host/Vite/Edge startup instability is claimed**.
+
+**Limits:** actual Safari/WebKit, hardware phones, remote CI and deployment were **not performed**. Chromium native touch/keyboard evidence is not hardware-device coverage. Keep source/build/worktrees frozen during browsers and DEV/production checks sequential; do not follow a generic slow-file tip by running groups concurrently. Preserve the existing user's preview rather than stopping it to reclaim a port.
+
+### Reproduce the current checkpoint
+
+Usual commands are `npm run check`, `npm run verify`, `npm run test:browser`, `npm run test:preview` and `npm run preview`; [architecture](architecture.md#typescript-and-developer-commands) explains their scope. For a **recommended equivalent reproduction partition**, run these **sequentially**, with no edits/builds/worktree changes during browser coverage. The nine-case Tour `--grep-invert` command below was not executed in the accepted observations: one ten-case Tour invocation produced 9 passes and 1 localhost-loading timeout, then the unchanged recovery case passed alone. Installed Edge is default; optionally prefix commands with `PLAYWRIGHT_CHANNEL=chrome` for installed Chrome. These reproduce the coverage, not the exact invocation history or a promise that host startup delays cannot recur.
+
+```sh
+npm run verify
+# 16 standalone + 24 navigation
+npm run test:browser -- tests/browser/game.spec.ts tests/browser/bay.spec.ts tests/browser/station.spec.ts tests/browser/garden.spec.ts
+npm run test:browser -- tests/browser/navigation.spec.ts
+# 9 Tour + 1 recovery, each in a fresh process
+npm run test:browser -- tests/browser/tour.spec.ts --grep-invert 'earned Tour recovery'
+npm run test:browser -- tests/browser/tour.spec.ts --grep 'earned Tour recovery'
+# UI: 15 desktop welcome + 15 mobile welcome + 17 other
+npm run test:browser -- tests/browser/ui-readability.spec.ts --grep 'readable welcome.*(1440x900|1920x1080|1024x768)'
+npm run test:browser -- tests/browser/ui-readability.spec.ts --grep 'readable welcome.*(390x844|320x640|844x390)'
+npm run test:browser -- tests/browser/ui-readability.spec.ts --grep-invert 'readable welcome|ten-stop'
+# Ten-stop UI: 2 desktop + 3 phone/native touch + 2 landscape
+npm run test:browser -- tests/browser/ui-readability.spec.ts --grep 'ten-stop.*1440x900'
+npm run test:browser -- tests/browser/ui-readability.spec.ts --grep 'ten-stop.*320x640'
+npm run test:browser -- tests/browser/ui-readability.spec.ts --grep 'ten-stop.*844x390'
+# Only after DEV completes, and only with port 4173 free:
+npm run test:preview
+```
+
+The accepted final production run instead used an **ignored temporary equivalent Playwright config on 4175** against the verified build. To reproduce that exception without disturbing a user-owned 4173 preview, derive a local ignored config from `playwright.preview.config.ts`, preserving its production test directory, channel/options, assertions, timeouts and `reuseExistingServer: false`; change both `use.baseURL` and the webServer URL/strict preview command from 4173 to **4175**. Then use `npx playwright test --config <ignored-local-config>` after DEV. Resolve relative paths from the temporary config correctly. The normal `npm run test:preview` still builds and expects a free **4173**; no permanent config/port change was made. Check port ownership before any server action.
+
+Cross-computer clone/fetch instructions [below](#continue-on-another-computer) retrieve committed `main` history after the authorized publication; they do not transfer pending local changes or ignored validation artifacts. The existing local 4173 preview was preserved throughout capture. No release operations were performed by the documentation worker.
+
+### Five-location screenshot provenance — 2026-09-11
+
+The existing two **1440×900 three-stop** welcome/driving JPEGs were inspected and matched the owner's description before their explicitly authorized replacement. Both new candidates were captured under ignored `artifacts/five-location-release/`, visually inspected, then copied **byte-for-byte** to the maintained paths. JPEG headers independently confirmed dimensions, and copied bytes/SHA256 matched the candidates.
+
+| Asset | Dimensions | Bytes | Actual scene |
+| --- | --- | ---: | --- |
+| `docs/screenshots/planet-overview.jpg` | **1440×900** | **145,127** | Settled **TEN-STOP TOUR / Five places. One big day.** welcome, **10** parcels, **Next: Sunrise Bakery** |
+| `docs/screenshots/delivery-run.jpg` | **1440×900** | **111,996** | Early Bay ramp approach, van and roof cargo visible, **Sunrise Bakery**, **01 / 10**, centered compass and left context |
+
+- **Environment:** installed Playwright, fresh Microsoft Edge context (`msedge` **152.0.4191.66**), **1440×900 CSS pixels**, device scale **1**, **JPEG quality 90**, default normal motion. Capture began **2026-09-11T01:45:36.923Z**.
+- **Source:** existing primary-owned production preview **http://127.0.0.1:4173/tiny-planet-courier/**, no query; actual entry **`assets/index-wODMr3ZV.js`**. No server was started, stopped or rebuilt.
+- **Welcome:** waited for ready Tour, fonts and **2200ms** of ordinary camera settling. This fresh random offer selected **Sunrise Bakery**; no seed or randomness override was used.
+- **Driving:** clicked **Start delivering**, waited **2400ms**, held **W for 1000ms**, released, then captured without an extra settle. The image shows **144m / 35km/h**; the subsequent read-only DOM observation was **142m / 34km/h**, because normal simulation continued. Before input the distance was **169m**. Mission cargo was **A bag of warm croissants**.
+- **Validation:** HTTP **200**, `data-ready=true`, `data-prototype=tour`, **10** parcels, no `__planetTest`, no PLAYTEST copy, hidden error panel, normal motion and **zero page/console errors**. Start retained the offered first destination. Driving navigation and left context were visible. Browser/context were **closed** after capture.
+- **Integrity:** welcome SHA256 `fc7b2b5c7d6900e2faf71da412ed37dc780c9ae111b005e6734ac9e6560aa295`; driving SHA256 `58b50b46494d1486e78ddf2578f630c6641582bfe54d132c4769dcd21e286e3a`.
+
+No test bridge, test fixture, game-state mutation, teleport, DOM/CSS injection, hidden/repositioned HUD, cropping or generated artwork was used. These are real welcome/early-driving images, **not full-Tour evidence or a claim that all five sites are visible**. The historical 2026-09-09 sizes and provenance below describe the assets as they existed then; those bytes have now been replaced.
+
+The capture script (`capture-readme.mjs`), candidates (`capture-welcome.jpg`, `capture-driving.jpg`) and full observation/copy record (`capture-provenance.json`) stay ignored under **`artifacts/five-location-release/`**. Only the two selected JPEGs are release assets. This worker ran screenshot/browser assertions and byte/dimension checks, not verify/build/unit/full-browser suites, Git mutations or deployment; final release verification belongs to the primary.
+
+---
+
+<a id="engineering-release-checkpoint--2026-09-10"></a>
+
+## Historical engineering release checkpoint — 2026-09-10
+
+The local evidence below predates the released engineering baseline now identified as **`d5a7985`**. Its then-pending publication language and authorization are preserved as history, not the status or permission boundary for the current five-location candidate.
 
 **Local validation was recorded on `chore/engineering-structure` from baseline `590c329`.** At that time, the changes were uncommitted and unpublished; no commit, push, merge or deployment had been performed for this iteration. On 2026-09-10, the owner subsequently tried the production preview, accepted it, and explicitly authorized committing and pushing the verified engineering changes directly to `main`. The coordinator will commit on `chore/engineering-structure`, fast-forward `main` and push without force, then verify exact-SHA Pages Actions. The exact pushed SHA and deployment outcome still require coordinator verification; authorization is not publication confirmation.
 
@@ -27,7 +127,11 @@ An intermediate **88/90** rerun encountered two unsolicited whole-document reloa
 
 <a id="current-checkpoint-and-cross-computer-handoff--2026-09-08"></a>
 
-## Current checkpoint and cross-computer handoff — 2026-09-09
+<a id="current-checkpoint-and-cross-computer-handoff--2026-09-09"></a>
+
+## Historical three-stop checkpoint and cross-computer handoff — 2026-09-09
+
+**Historical scope:** this section and its acceptance/release permissions describe only the old three-stop release. Separate authorization and publication checks for the five-location release are recorded at the top.
 
 **Authorized official-main release:** the owner has accepted the HUD and personally completed the connected Tour with **no blocking issues**. The former destination-compass/whole-journey owner-playtest gates are closed. The owner explicitly requested the main merge and README screenshot refresh, then confirmed **Tour as the official public default with automatic GitHub Pages deployment**. Do not request that acceptance or authorization again.
 
@@ -116,6 +220,8 @@ These historical results used the same sequential split filters recorded in the 
 
 ### Continue on another computer
 
+These commands retrieve committed `main` history, including the five-location feature once the authorized release is pushed. They do not transfer pending local changes; preserve local work before switching branches.
+
 Recommend **Node.js 24**. Fresh clone:
 
 ```sh
@@ -153,7 +259,7 @@ If switching or fast-forwarding is blocked by local work/divergence, stop and re
 - In original/Bay/Station/Garden/Tour, steering points at active `run.target.normal` using vehicle-relative spherical `headingTo(vehicle.normal, vehicle.forward, run.target.normal)`. Destination name, distance and snapshot targets describe that same delivery. The arrow may point across water or obstacles by design; players choose their own safe route.
 - Road caches feed hints/context and road-aware `reverseToExit`, not the compass. A destination behind the van does not imply that the road exit is behind it. Tour handoffs immediately retarget the next destination.
 - Shortest-arc frame-independent smoothing, reduced motion, glass HUD, parking/recovery cues and hidden home/pause/completed navigation remain intact. A coincident airborne destination has no invented heading. R, splash recovery, restart, home and handoffs clear stale navigation state.
-- Tour continuity, three parcels, splits, earned checkpoints and accepted route geometry/physics are unchanged. Pose fixtures isolate UI/target behavior, not route playability; real-input route tests provide the latter evidence. See [navigation-stability-plan.md](navigation-stability-plan.md).
+- Tour continuity, splits, earned checkpoints and accepted route geometry/physics remain. The historical three-stop release used three parcels; the current five-location contract uses ten. Pose fixtures isolate UI/target behavior, not route playability; real-input route tests provide the latter evidence. See [navigation-stability-plan.md](navigation-stability-plan.md).
 
 <a id="current-compact-hud-and-welcome-refinement--2026-09-08"></a>
 

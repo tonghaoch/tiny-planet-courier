@@ -92,7 +92,7 @@ export function renderUIShell(prototype: PrototypeDefinition | null): string {
       <section class="modal-backdrop" data-view="complete" hidden>
         <div class="modal complete-modal" role="dialog" aria-modal="true" aria-labelledby="complete-title">
           <div class="complete-badge">${icons.parcel}<span>✦</span></div><span class="eyebrow">ALL THE LITTLE THINGS, DELIVERED.</span>
-          <h2 id="complete-title">All smiles, delivered.</h2><p>${isPlaytest ? 'One parcel. One smile.' : 'Three parcels. Three smiles.'}<br>You made this little planet's day.</p>
+          <h2 id="complete-title">All smiles, delivered.</h2><p>${isPlaytest ? 'One parcel. One smile.' : prototype?.id === 'tour' ? 'Ten parcels. Ten smiles.' : 'Three parcels. Three smiles.'}<br>You made this little planet's day.</p>
           <div class="result-stats"><div><small>Journey time</small><strong id="result-time">00:00</strong></div><span></span><div><small>Personal best</small><strong id="best-time">—</strong></div></div>
           <span id="record-label" class="record-label">Every trip brings a new view.</span>
           <button class="start-button" data-action="restart">Play again ${icons.arrow}</button>
@@ -109,12 +109,12 @@ export function renderUIShell(prototype: PrototypeDefinition | null): string {
         <small class="bay-result-caption">Keep driving, or take another lap.</small>
       </section>
       <section id="tour-result" class="tour-result" aria-label="Tour result" hidden>
-        <h2>Three smiles, delivered.</h2>
-        <div class="tour-totals"><span>Total <strong id="tour-result-time">00:00</strong></span><span>Best <strong id="tour-best-time">—</strong></span></div>
-        <ol id="tour-splits" aria-label="Tour leg splits"></ol>
+        <h2>${prototype?.id === 'tour' ? prototype.result.heading : 'Three smiles, delivered.'}</h2>
+        <div class="tour-totals"><span>Total <strong id="tour-result-time">00:00</strong></span><span>${prototype?.id === 'tour' ? 'Route best' : 'Best'} <strong id="tour-best-time">—</strong></span></div>
+        ${prototype?.id === 'tour' ? '<details id="tour-details"><summary>10 delivery splits <span>· same itinerary</span></summary><ol id="tour-splits" aria-label="Tour leg splits" tabindex="0"></ol></details>' : '<ol id="tour-splits" aria-label="Tour leg splits"></ol>'}
         <span id="tour-record-label" role="status" aria-live="polite"></span>
         <button class="start-button" data-action="restart">Restart tour ${icons.arrow}</button>
-        <small>Keep driving. The road returns to the bay.</small>
+        <small>${prototype?.id === 'tour' ? 'All delivered. Keep exploring.' : 'Keep driving. The road returns to the bay.'}</small>
       </section>
       <div id="toast" class="toast" role="status" aria-live="polite"><span>${icons.star}</span><div id="toast-message"></div></div>
       <section id="error-panel" class="error-panel" hidden role="alert"><span>${icons.planet}</span><h2>The planet cannot launch yet.</h2><p id="error-message"></p><button class="start-button" data-action="reload">Reload ${icons.arrow}</button></section>

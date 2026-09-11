@@ -504,6 +504,49 @@ h1 { font-family: Georgia, "Times New Roman", serif; font-weight: 400; font-size
   .console-divider { height: 25px; }
   .delivery-queue, .drive-hint { display: none; }
 }
+/* Ten parcels stay a compact rack/queue; split details never occupy the pedal area. */
+#app[data-prototype="tour"] #queue-stops { display: grid; grid-template-columns: repeat(5, 32px); gap: 22px 8px; padding-bottom: 18px; }
+#app[data-prototype="tour"] .queue-stop { width: 32px; height: 32px; }
+#app[data-prototype="tour"] .queue-stop > span { font-size: 12px; }
+#app[data-prototype="tour"] .queue-line { display: none; }
+#app[data-prototype="tour"] .delivery-queue { align-items: flex-start; }
+.tour-result { max-height: calc(100dvh - 250px); overflow-y: auto; pointer-events: auto; }
+.tour-result h2 { font-size: 20px; }
+.tour-totals, #tour-record-label, .tour-result > small { font-size: 12px; line-height: 1.4; }
+#tour-details { grid-column: 1 / -1; min-width: 0; }
+#tour-details summary { min-height: 44px; padding-block: 12px; cursor: pointer; font-size: 12px; line-height: 1.5; }
+#tour-details summary span { color: var(--mint); }
+#tour-details summary:focus-visible, #tour-splits:focus-visible { outline: 2px solid var(--cream); outline-offset: 2px; }
+#tour-details #tour-splits { max-height: 120px; overflow-y: auto; overscroll-behavior: contain; margin: 0 0 8px; }
+#tour-details #tour-splits li { font-size: 12px; line-height: 1.8; }
+#tour-splits strong { flex-shrink: 0; }
+.tour-result .start-button { font-size: 12px; }
+@media (max-width: 760px) {
+  .tour-result { max-height: calc(100dvh - 206px - env(safe-area-inset-bottom)); }
+}
+@media (max-width: 760px) and (orientation: portrait) {
+  /* Expanded splits trade decorative copy for one native scroll window above the van. */
+  .tour-result:has(#tour-details[open]) { max-height: none; overflow: visible; }
+  .tour-result:has(#tour-details[open]) > :is(h2, small) { display: none; }
+  #tour-details[open] #tour-splits { max-height: 48px; margin-bottom: 0; touch-action: pan-y; }
+}
+@media (max-height: 500px) {
+  .tour-result { top: 72px; max-height: calc(100dvh - 176px - env(safe-area-inset-bottom)); }
+}
+@media (max-height: 500px) and (orientation: landscape) {
+  /* Keep the narrow left card in flow; only the split list needs to scroll. */
+  .tour-result { left: 4.3%; right: auto; width: 265px; max-height: none; overflow: visible; padding: 10px 12px; display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 5px 10px; }
+  .tour-result h2 { grid-column: 1 / -1; margin: 0; }
+  .tour-totals { grid-column: 1 / -1; justify-content: flex-start; gap: 10px; }
+  .tour-totals strong { display: inline; font-size: 16px; margin: 0 0 0 4px; }
+  #tour-record-label { grid-column: 1; align-self: center; }
+  .tour-result .start-button { grid-column: 2; margin: 0; padding: 0 10px; letter-spacing: 0; gap: 0; }
+  .tour-result .start-button svg { display: none; }
+  .tour-result > small { grid-column: 1 / -1; margin: 0; }
+  .tour-result:has(#tour-details[open]) > :is(h2, small) { display: none; }
+  #tour-details[open] #tour-splits { max-height: 48px; margin: 0; padding: 3px 0; touch-action: pan-y; }
+}
+
 @media (prefers-reduced-motion: reduce) {
   #direction-arrow { transition: none; }
 }

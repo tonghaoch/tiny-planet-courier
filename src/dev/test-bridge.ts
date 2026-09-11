@@ -116,6 +116,17 @@ export function installTestBridge({
       bottom: Math.max(...ys),
     };
   };
+  const catalog = () =>
+    tourLayout!.stops.map((stop, index) => ({
+      index,
+      id: stop.id,
+      name: stop.destination.name,
+      parcel: stop.destination.parcel,
+      destination: stop.destination.normal.toArray(),
+      entry: { normal: stop.entryPose.normal.toArray(), forward: stop.entryPose.forward.toArray() },
+      pad: { normal: stop.deliveredPose.normal.toArray(), forward: stop.deliveredPose.forward.toArray() },
+    }));
+  const serializedPlan = () => ({ ...tour!.plan, order: [...tour!.plan.order] });
   // Explicit UI/state fixtures only; real-route acceptance never invokes these.
   const dockFixture = (index: number) => {
     const destination = world.destinations[index];
@@ -139,6 +150,7 @@ export function installTestBridge({
     __planetTest: {
       snapshot: () => {
         const { guidance, roadRoute, tourRoute, tourNavigationPhase, handoffs, recentDriveEvents } = observe();
+        const observedLocation = tour?.currentLocationId ?? tour?.completedLocationId;
         return {
           mode: run.mode,
           index: run.index,
@@ -167,8 +179,14 @@ export function installTestBridge({
           cargoCount: vehicle.cargoCount,
           cargoPositions: vehicle.getCargoWorldPositions().map(point => point.toArray()),
           landingGuideVisible: vehicle.landingGuideVisible,
-          local: (tour?.currentStop?.level ?? world.authoredLevel)?.toLocal(vehicle.normal),
-          reaction: authoredPrototype ? world.getDeliveryReactionSnapshot() : undefined,
+          local: (observedLocation ? tourLayout!.location(observedLocation).level : world.authoredLevel)?.toLocal(
+            vehicle.normal,
+          ),
+          reaction: observedLocation
+            ? world.getLocationReactionSnapshot(observedLocation)
+            : authoredPrototype
+              ? world.getDeliveryReactionSnapshot()
+              : undefined,
           navigationTarget: guidance?.target?.slice(),
           route: tour ? tourRoute?.route : roadRoute,
           directDestinationHeading: guidance?.directDestinationHeading ?? null,
@@ -187,10 +205,16 @@ export function installTestBridge({
             : null,
           tour: tour
             ? {
+                plan: serializedPlan(),
+                recordKey: tour.recordKey,
+                catalog: catalog(),
+                currentLocationId: tour.currentLocationId ?? null,
+                completedLocationId: tour.completedLocationId ?? null,
                 splits: tour.splits,
                 entryVisited: tour.entryVisited,
                 currentStop: tour.currentStop?.id ?? null,
                 checkpoint: {
+                  legIndex: tour.checkpoint.legIndex,
                   stopId: tour.checkpoint.stopId,
                   kind: tour.checkpoint.kind,
                   label: tour.checkpoint.label,
@@ -205,8 +229,13 @@ export function installTestBridge({
                 },
                 navigationPhase: tourNavigationPhase,
                 routeCache: compactTourCache(tourRoute),
-                reactions: tourLayout!.stops.map((_stop, index) => world.getDeliveryReactionSnapshot(index)),
-                handoffs: handoffs.map(handoff => ({ ...handoff })),
+                reactions: tourLayout!.stops.map(stop => world.getLocationReactionSnapshot(stop.id)),
+                handoffs: handoffs.map(handoff => ({
+                  ...handoff,
+                  origin: handoff.origin.slice(),
+                  normal: handoff.normal.slice(),
+                  forward: handoff.forward.slice(),
+                })),
                 locals: tourLayout!.stops.map(stop => stop.level.toLocal(vehicle.normal)),
                 recipientScreens: tourLayout!.stops.map(stop => recipientScreen(stop.id)),
                 sceneObjects: (() => {
@@ -220,17 +249,24 @@ export function installTestBridge({
         };
       },
       routes: () =>
-        tourLayout
+        tourLayout && tour
           ? {
-              legs: tourLayout.stops.map((stop, index) => ({
-                index,
-                stopId: stop.id,
-                destination: stop.destination.normal.toArray(),
-                entry: { normal: stop.entryPose.normal.toArray(), forward: stop.entryPose.forward.toArray() },
-                pad: { normal: stop.deliveredPose.normal.toArray(), forward: stop.deliveredPose.forward.toArray() },
-                wide: tourLayout.routeForLeg(index, 'wide').map(point => point.toArray()),
-                short: tourLayout.routeForLeg(index, 'short').map(point => point.toArray()),
-              })),
+              plan: serializedPlan(),
+              recordKey: tour.recordKey,
+              catalog: catalog(),
+              legs: tour.plan.order.map((id, index) => {
+                const stop = tourLayout.location(id);
+                return {
+                  index,
+                  occurrenceId: tour.occurrenceId(index),
+                  stopId: stop.id,
+                  destination: stop.destination.normal.toArray(),
+                  entry: { normal: stop.entryPose.normal.toArray(), forward: stop.entryPose.forward.toArray() },
+                  pad: { normal: stop.deliveredPose.normal.toArray(), forward: stop.deliveredPose.forward.toArray() },
+                  wide: tour.routeForLeg(index, 'wide').map(point => point.toArray()),
+                  short: tour.routeForLeg(index, 'short').map(point => point.toArray()),
+                };
+              }),
               connectors: tourLayout.connectors.map(connector => ({
                 from: connector.from,
                 to: connector.to,
@@ -303,9 +339,15 @@ export function installTestBridge({
         if (pose.reset) resetNavigation();
         refreshHUD();
       },
-      dockAtTarget: () => dockFixture(run.index),
+      dockAtTarget: () =>
+        dockFixture(
+          tourLayout && tour ? tourLayout.stops.findIndex(stop => stop.id === tour.currentLocationId) : run.index,
+        ),
       dockAtStop: (index: number) => {
         if (tourLayout && Number.isInteger(index)) dockFixture(index);
+      },
+      dockAtLocation: id => {
+        if (tourLayout) dockFixture(tourLayout.stops.findIndex(stop => stop.id === id));
       },
     } satisfies PlanetTestBridge,
   });

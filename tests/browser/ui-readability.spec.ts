@@ -1,4 +1,5 @@
-import { dockAtTarget, planetSnapshot } from '../helpers/planet-test';
+import { dockAtTarget, planetSnapshot, tourRoutes, tourSnapshot } from '../helpers/planet-test';
+import { deliverFixture, location } from '../helpers/tour-fixture';
 import { expect, test, type Page } from '@playwright/test';
 
 const viewports = [
@@ -401,22 +402,31 @@ async function expectNavigationLayout(page: Page, width: number, treatment?: Nav
   });
   expect(wrapping).toEqual({ clipped: false, whitespace: 'normal', align: 'left' });
   await expectNavigationSurface(page, treatment);
-  for (const selector of [
-    '.brand',
-    '.sound-button',
-    '.pause-button',
-    '.run-time',
-    '.mission-card',
-    '.touch-controls',
-    '.driving-console',
-    '.delivery-queue',
-    '.toast.visible',
-  ]) {
-    if (await page.locator(selector).isVisible()) {
-      const other = await box(page, selector);
-      expect(intersects(hud, other), `navigation vs ${selector}`).toBe(false);
-      expect(intersects(hint, other), `hint vs ${selector}`).toBe(false);
-    }
+  const overlays = await page.evaluate(
+    selectors =>
+      selectors.flatMap(selector => {
+        const element = document.querySelector(selector);
+        if (!element) return [];
+        const visibility = getComputedStyle(element).visibility;
+        if (visibility === 'hidden' || visibility === 'collapse') return [];
+        const { x, y, width, height } = element.getBoundingClientRect();
+        return width > 0 && height > 0 ? [{ selector, x, y, width, height }] : [];
+      }),
+    [
+      '.brand',
+      '.sound-button',
+      '.pause-button',
+      '.run-time',
+      '.mission-card',
+      '.touch-controls',
+      '.driving-console',
+      '.delivery-queue',
+      '.toast.visible',
+    ],
+  );
+  for (const other of overlays) {
+    expect(intersects(hud, other), `navigation vs ${other.selector}`).toBe(false);
+    expect(intersects(hint, other), `hint vs ${other.selector}`).toBe(false);
   }
   expect(intersects(hint, hud)).toBe(false);
   const overflow = await page
@@ -466,7 +476,7 @@ for (const treatment of ['glass', 'fallback', 'reduced'] as const) {
         });
       });
     }
-    await page.goto('/?test=1&prototype=tour');
+    await page.goto('/?test=1&prototype=tour&tourSeed=227');
     await expect(page.locator('#app')).toHaveAttribute('data-ready', 'true');
     if (treatment === 'fallback') expect(fallbackIntercepted).toBe(true);
     if (treatment === 'reduced') {
@@ -519,7 +529,7 @@ for (const treatment of ['glass', 'fallback', 'reduced'] as const) {
   });
 }
 
-test('bare development root welcomes the released Tour and starts three deliveries', async ({ page }) => {
+test('bare development root welcomes the released Tour and starts ten deliveries', async ({ page }) => {
   const errors: string[] = [];
   page.on('pageerror', error => errors.push(error.message));
   await page.goto('/');
@@ -527,10 +537,10 @@ test('bare development root welcomes the released Tour and starts three deliveri
   await expect(page.locator('#app')).toHaveAttribute('data-prototype', 'tour');
   await expect(page.locator('#app')).toHaveAttribute('data-mode', 'home');
   await expect(page.locator('#error-panel')).toBeHidden();
-  await expect(page.locator('.home-view h1')).toHaveText(/Three stops\.\s*One big day\./);
-  await expect(page.locator('.hero-copy > .eyebrow')).toHaveText('THREE-STOP TOUR');
+  await expect(page.locator('.home-view h1')).toHaveText(/Five places\.\s*One big day\./);
+  await expect(page.locator('.hero-copy > .eyebrow')).toHaveText('TEN-STOP TOUR');
   await expect(page.locator('.ticket-stamp')).toHaveText('READY TO GO');
-  await expect(page.locator('#parcel-count')).toHaveText('03');
+  await expect(page.locator('#parcel-count')).toHaveText('10');
   await expect(page.locator('.ticket-count small')).toHaveText('little parcels');
   await expect(page.locator('#app')).not.toContainText(/playtest/i);
   expect(await page.evaluate(() => '__planetTest' in window)).toBe(false);
@@ -538,9 +548,11 @@ test('bare development root welcomes the released Tour and starts three deliveri
   await page.getByRole('button', { name: 'Start delivering', exact: true }).click();
   await expect(page.locator('#app')).toHaveAttribute('data-mode', 'playing');
   await expectNavigationVisibility(page, true);
-  await expect(page.locator('#mission-name')).toHaveText('Sunrise Bakery');
-  await expect(page.locator('#mission-index')).toHaveText('01 / 03');
-  await expect(page.locator('#queue-stops .queue-stop')).toHaveCount(3);
+  await expect(page.locator('#mission-name')).toHaveText(
+    /^(Sunrise Bakery|Stargaze Station|Windmill Garden|Beacon Post|Redrock Depot)$/,
+  );
+  await expect(page.locator('#mission-index')).toHaveText('01 / 10');
+  await expect(page.locator('#queue-stops .queue-stop')).toHaveCount(10);
   await expect(page.locator('#stage canvas')).toBeFocused();
   expect(await page.evaluate(() => '__planetTest' in window)).toBe(false);
   expect(errors).toEqual([]);
@@ -550,7 +562,7 @@ for (const viewport of viewports) {
   for (const mode of modes) {
     test(`readable welcome and centered HUD in ${mode} at ${viewport.width}x${viewport.height}`, async ({ page }) => {
       await page.setViewportSize(viewport);
-      await page.goto(`/?test=1&prototype=${mode}`);
+      await page.goto(`/?test=1&prototype=${mode}&tourSeed=227`);
       await expect(page.locator('#app')).toHaveAttribute('data-ready', 'true');
       await expect(page.locator('#app')).toHaveAttribute('data-prototype', mode);
       if (mode === 'bay' || mode === 'station' || mode === 'garden') {
@@ -655,12 +667,14 @@ for (const viewport of viewports) {
 }
 
 test('live Tour target updates, recovery, restart, completion and home hide stale navigation', async ({ page }) => {
-  await page.goto('/?test=1&prototype=tour');
+  await page.goto('/?test=1&prototype=tour&tourSeed=227');
   await expect(page.locator('#app')).toHaveAttribute('data-ready', 'true');
   await page.getByRole('button', { name: 'Start delivering' }).click();
-  for (const [index, name] of ['Sunrise Bakery', 'Stargaze Station', 'Windmill Garden'].entries()) {
+  const data = await tourRoutes(page);
+  for (const [index, id] of data.plan.order.entries()) {
+    const name = location(data, id).name;
     await expect(page.locator('#mission-name')).toHaveText(name);
-    await expect(page.locator('#mission-index')).toHaveText(`0${index + 1} / 03`);
+    await expect(page.locator('#mission-index')).toHaveText(`${String(index + 1).padStart(2, '0')} / 10`);
     await expectNavigationVisibility(page, true);
     await page.keyboard.press('KeyR');
     await expect(page.locator('#mission-name')).toHaveText(name);
@@ -676,7 +690,7 @@ test('live Tour target updates, recovery, restart, completion and home hide stal
   await page.getByRole('button', { name: 'Restart tour', exact: true }).click();
   await expectNavigationVisibility(page, true);
   await expect(page.locator('#mission-name')).toHaveText('Sunrise Bakery');
-  await expect(page.locator('#mission-index')).toHaveText('01 / 03');
+  await expect(page.locator('#mission-index')).toHaveText('01 / 10');
   await page.keyboard.press('Escape');
   await page.getByRole('dialog').getByRole('button', { name: 'Back to home' }).click();
   await expectNavigationVisibility(page, false);
@@ -699,7 +713,7 @@ for (const [viewport, reducedMotion] of [
     });
     const page = await context.newPage();
     try {
-      await page.goto('/?test=1&prototype=tour');
+      await page.goto('/?test=1&prototype=tour&tourSeed=227');
       await expect(page.locator('#app')).toHaveAttribute('data-ready', 'true');
       await page.getByRole('button', { name: 'Start delivering', exact: true }).tap();
       // Reduced-motion toast opacity can settle before the welcome camera reaches a readable projection.
@@ -733,7 +747,7 @@ test('short landscape touch controls, readouts and handoff toast stay separate',
   });
   const page = await context.newPage();
   try {
-    await page.goto('/?test=1&prototype=tour');
+    await page.goto('/?test=1&prototype=tour&tourSeed=227');
     await expect(page.locator('#app')).toHaveAttribute('data-ready', 'true');
     await page.getByRole('button', { name: 'Start delivering' }).tap();
     await expect(page.locator('.touch-controls')).toBeVisible();
@@ -832,7 +846,7 @@ for (const touch of [false, true]) {
     });
     const page = await context.newPage();
     try {
-      await page.goto('/?test=1&prototype=tour');
+      await page.goto('/?test=1&prototype=tour&tourSeed=227');
       await expect(page.locator('#app')).toHaveAttribute('data-ready', 'true');
       const start = page.getByRole('button', { name: 'Start delivering', exact: true });
       const initial = (await start.boundingBox())!;
@@ -864,6 +878,271 @@ for (const touch of [false, true]) {
     }
   });
 }
+
+async function expectTourResultClear(page: Page, recipientIndex: number) {
+  const viewport = page.viewportSize()!;
+  const result = await box(page, '#tour-result');
+  expect(result.x).toBeGreaterThanOrEqual(0);
+  expect(result.x + result.width).toBeLessThanOrEqual(viewport.width);
+  expect(result.y).toBeGreaterThanOrEqual((await box(page, '.masthead')).height);
+  expect(result.y + result.height).toBeLessThanOrEqual(viewport.height);
+  const controls = [];
+  for (const selector of ['.touch-steering', '.touch-pedals', '.driving-console', '.run-time']) {
+    if (await page.locator(selector).isVisible()) {
+      const rect = await box(page, selector);
+      controls.push({ selector, ...rect });
+      expect(intersects(result, rect), `results vs ${selector}`).toBe(false);
+    }
+  }
+  const state = await tourSnapshot(page);
+  expectVanClear({ ...state, overlays: [{ selector: '#tour-result', ...result }] }, viewport.width, viewport.height);
+  const recipient = state.tour.recipientScreens[recipientIndex]!;
+  expect(recipient.visible).toBe(true);
+  expect(
+    intersects(result, {
+      x: recipient.left,
+      y: recipient.top,
+      width: recipient.right - recipient.left,
+      height: recipient.bottom - recipient.top,
+    }),
+    `results vs recipient: ${JSON.stringify({ result, recipient })}`,
+  ).toBe(false);
+  for (const selector of ['#tour-details summary', '#tour-result .start-button']) {
+    const target = await box(page, selector);
+    expect(target.height).toBeGreaterThanOrEqual(44);
+    expect(target.y).toBeGreaterThanOrEqual(result.y);
+    expect(target.y + target.height).toBeLessThanOrEqual(result.y + result.height);
+  }
+  for (const selector of ['.tour-totals', '#tour-details summary', '#tour-record-label', '#tour-result .start-button'])
+    expect(await font(page, selector)).toBeGreaterThanOrEqual(12);
+  const overflow = await page
+    .locator('#tour-result, #tour-result *')
+    .evaluateAll(elements =>
+      elements
+        .filter(element => element.getBoundingClientRect().width && element.scrollWidth > element.clientWidth + 1)
+        .map(element => element.id || element.tagName),
+    );
+  expect(overflow).toEqual([]);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(viewport.width);
+  return { result, van: state.vehicleScreen, recipient, controls };
+}
+
+for (const viewport of [viewports[0], viewports[4], viewports[5]]) {
+  for (const reducedMotion of ['no-preference', 'reduce'] as const) {
+    test(`ten-stop targets, repeated recipients and native split disclosure at ${viewport.width}x${viewport.height} (${reducedMotion})`, async ({
+      page,
+    }) => {
+      // Ten serial real recipient animations plus native disclosure interactions exceed one 45s scenario.
+      // Only this family's total budget changes; startup and individual polling deadlines stay intact.
+      test.setTimeout(90000);
+      await page.setViewportSize(viewport);
+      await page.emulateMedia({ reducedMotion });
+      await page.goto('/?test=1&prototype=tour&tourSeed=227');
+      await expect(page.locator('#app')).toHaveAttribute('data-ready', 'true');
+      await expect(page.locator('#parcel-count')).toHaveText('10');
+      await expect(page.locator('.hero-copy > .eyebrow')).toHaveText('TEN-STOP TOUR');
+      const data = await tourRoutes(page);
+      await expect(page.locator('#queue-stops .queue-stop')).toHaveCount(10);
+      await page.getByRole('button', { name: 'Start delivering', exact: true }).click();
+      // Keep the startup readiness contract: reduced motion is not permission to shrink the van.
+      await expect(async () => {
+        const van = (await planetSnapshot(page)).vehicleScreen;
+        expect(van.visible).toBe(true);
+        expect(van.right - van.left).toBeGreaterThan(10);
+        expect(van.bottom - van.top).toBeGreaterThan(15);
+      }).toPass({ timeout: 1000, intervals: [50] });
+      await expectToastLayout(page);
+      expectVanClear(await drivingVisibility(page), viewport.width, viewport.height);
+      const initialObjects = (await tourSnapshot(page)).tour.sceneObjects;
+      for (const leg of data.legs) {
+        const site = location(data, leg.stopId);
+        const before = await tourSnapshot(page);
+        expect(before.tour.currentLocationId).toBe(site.id);
+        expect(before.target).toEqual(site.destination);
+        expect(before.cargoCount).toBe(10 - leg.index);
+        await expect(page.locator('#mission-name')).toHaveText(site.name);
+        await expect(page.locator('#mission-index')).toHaveText(`${String(leg.index + 1).padStart(2, '0')} / 10`);
+        // Teleporting isolates recipient/UI state; it is not a route acceptance test.
+        const delivered = await deliverFixture(page, leg.index);
+        if (leg.index < 9) await expectToastLayout(page);
+        expect(delivered.tour.completedLocationId).toBe(site.id);
+        expect(delivered.tour.handoffs.at(-1)).toMatchObject({ locationId: site.id, occurrenceId: leg.occurrenceId });
+        expect(delivered.tour.reactions[site.index].progress).toBeLessThan(1);
+        await expect
+          .poll(async () => (await tourSnapshot(page)).tour.reactions[site.index].progress, { intervals: [50] })
+          .toBe(1);
+        const reacted = await tourSnapshot(page);
+        const recipient = reacted.tour.recipientScreens[site.index]!;
+        expect(recipient.visible).toBe(true);
+        expect(recipient.left).toBeGreaterThanOrEqual(0);
+        expect(recipient.right).toBeLessThanOrEqual(viewport.width);
+        expect(recipient.top).toBeGreaterThanOrEqual(0);
+        expect(recipient.bottom).toBeLessThanOrEqual(viewport.height);
+        expectVanClear(await drivingVisibility(page), viewport.width, viewport.height);
+        if (leg.index < 9) {
+          await expect(page.locator('#tour-result')).toBeHidden();
+          await expectNavigationLayout(page, viewport.width);
+        }
+      }
+      const details = page.locator('#tour-details');
+      const summary = details.locator('summary');
+      const splits = page.locator('#tour-splits');
+      const finished = await tourSnapshot(page);
+      await expect(page.locator('#tour-result')).toBeVisible();
+      await expect(page.locator('#tour-splits li')).toHaveCount(10);
+      expect(await details.evaluate(element => element.hasAttribute('open'))).toBe(false);
+      await expect(splits).toBeHidden();
+      await expect(page.locator('#tour-result')).toContainText('Route best');
+      const assertResultClear = () =>
+        expectTourResultClear(page, location(data, finished.tour.completedLocationId!).index);
+      const collapsed = await assertResultClear();
+      await test.info().attach('disclosure-collapsed', { body: await page.screenshot(), contentType: 'image/png' });
+      await summary.focus();
+      await page.keyboard.press('Space');
+      await expect(details).toHaveAttribute('open', '');
+      await expect(summary).toBeFocused();
+      await expect(splits).toBeVisible();
+      for (const leg of data.legs)
+        await expect(splits.locator('li').nth(leg.index)).toContainText(
+          `${String(leg.index + 1).padStart(2, '0')} · ${location(data, leg.stopId).name}`,
+        );
+      const expanded = await assertResultClear();
+      await test.info().attach('disclosure-expanded', { body: await page.screenshot(), contentType: 'image/png' });
+      await test.info().attach('disclosure-geometry', {
+        body: JSON.stringify({ collapsed, expanded }, null, 2),
+        contentType: 'application/json',
+      });
+      await page.keyboard.press('Tab');
+      await expect(splits).toBeFocused();
+      await page.keyboard.press('End');
+      await expect.poll(() => splits.evaluate(element => element.scrollTop)).toBeGreaterThan(0);
+      await expect(splits.locator('li').last()).toBeInViewport({ ratio: 1 });
+      await assertResultClear();
+      await page.keyboard.press('Home');
+      await expect.poll(() => splits.evaluate(element => element.scrollTop)).toBe(0);
+      const list = await splits.boundingBox();
+      await page.mouse.move(list!.x + list!.width / 2, list!.y + list!.height / 2);
+      await page.mouse.wheel(0, 300);
+      await expect.poll(() => splits.evaluate(element => element.scrollTop)).toBeGreaterThan(0);
+      await assertResultClear();
+      expect((await tourSnapshot(page)).speed).toBe(0);
+      expect((await tourSnapshot(page)).charge).toBe(finished.charge);
+      expect((await tourSnapshot(page)).elapsed).toBe(finished.elapsed);
+      expect((await tourSnapshot(page)).tour.splits).toEqual(finished.tour.splits);
+      await summary.focus();
+      await page.keyboard.press('Enter');
+      await expect(splits).toBeHidden();
+      await expect(summary).toBeFocused();
+      await assertResultClear();
+      await summary.click();
+      await expect(splits).toBeVisible();
+      await assertResultClear();
+      await summary.click();
+      await expect(splits).toBeHidden();
+      await assertResultClear();
+      expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(viewport.width);
+      await page.getByRole('button', { name: 'Restart tour', exact: true }).click();
+      await expect(page.locator('#stage canvas')).toBeFocused();
+      expect((await tourSnapshot(page)).tour.sceneObjects).toBe(initialObjects);
+      expect((await tourSnapshot(page)).tour.plan).toEqual(data.plan);
+    });
+  }
+}
+
+test('ten-stop split disclosure scrolls with real touch at 320x640', async ({ browser, browserName }) => {
+  test.skip(browserName !== 'chromium', 'Native touch swipes use Chromium CDP.');
+  const context = await browser.newContext({
+    baseURL: 'http://127.0.0.1:5173',
+    viewport: { width: 320, height: 640 },
+    hasTouch: true,
+    reducedMotion: 'reduce',
+  });
+  const page = await context.newPage();
+  const errors: string[] = [];
+  page.on('pageerror', error => errors.push(error.message));
+  try {
+    await page.goto('/?test=1&prototype=tour&tourSeed=227');
+    await expect(page.locator('#app')).toHaveAttribute('data-ready', 'true');
+    const data = await tourRoutes(page);
+    await page.getByRole('button', { name: 'Start delivering', exact: true }).tap();
+    // Fast docking isolates the completed UI only, not route playability or every reaction.
+    for (const leg of data.legs) await deliverFixture(page, leg.index);
+    const recipientIndex = location(data, data.legs.at(-1)!.stopId).index;
+    await expect
+      .poll(async () => (await tourSnapshot(page)).tour.reactions[recipientIndex].progress, { intervals: [50] })
+      .toBe(1);
+    const finished = await tourSnapshot(page);
+    const collapsed = await expectTourResultClear(page, recipientIndex);
+    const summary = page.locator('#tour-details summary');
+    const splits = page.locator('#tour-splits');
+    await expect(splits).toBeHidden();
+    await summary.tap();
+    await expect(page.locator('#tour-details')).toHaveAttribute('open', '');
+    await expect(splits).toBeVisible();
+    await expect(splits.locator('li')).toHaveCount(10);
+    expect(await font(page, '#tour-splits li:first-child')).toBeGreaterThanOrEqual(12);
+    const expanded = await expectTourResultClear(page, recipientIndex);
+    const initialScroll = await splits.evaluate(element => element.scrollTop);
+    expect(initialScroll).toBe(0);
+    // The list is the only scroll container: totals, native summary and restart stay reachable.
+    expect(await page.locator('#tour-result').evaluate(element => element.scrollHeight - element.clientHeight)).toBe(0);
+    const cdp = await context.newCDPSession(page);
+    const scrollSamples: number[] = [];
+    for (let swipe = 0; swipe < 12; swipe++) {
+      const rect = (await splits.boundingBox())!;
+      const x = rect.x + rect.width / 2;
+      const startY = rect.y + rect.height - 4;
+      const endY = rect.y + 4;
+      await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x, y: startY, id: 0 }] });
+      for (let step = 1; step <= 4; step++) {
+        await cdp.send('Input.dispatchTouchEvent', {
+          type: 'touchMove',
+          touchPoints: [{ x, y: startY + ((endY - startY) * step) / 4, id: 0 }],
+        });
+        await page.waitForTimeout(30);
+      }
+      await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+      if (swipe === 0)
+        await expect.poll(() => splits.evaluate(element => element.scrollTop)).toBeGreaterThan(initialScroll);
+      const scroll = await splits.evaluate(element => ({
+        top: element.scrollTop,
+        remaining: element.scrollHeight - element.clientHeight - element.scrollTop,
+      }));
+      scrollSamples.push(scroll.top);
+      await expectTourResultClear(page, recipientIndex);
+      const state = await tourSnapshot(page);
+      expect(state.speed).toBe(0);
+      expect(state.charge).toBe(finished.charge);
+      expect(state.elapsed).toBe(finished.elapsed);
+      expect(state.tour.splits).toEqual(finished.tour.splits);
+      if (scroll.remaining <= 1) break;
+    }
+    await expect(splits.locator('li').last()).toBeInViewport({ ratio: 1 });
+    await expect(page.locator('#tour-result-time')).not.toHaveText('—');
+    await expect(page.locator('#tour-best-time')).not.toHaveText('—');
+    await expect(page.locator('#tour-record-label')).toBeVisible();
+    await test.info().attach('touch-disclosure-geometry', {
+      body: JSON.stringify({ collapsed, expanded, scrollSamples }, null, 2),
+      contentType: 'application/json',
+    });
+    await test.info().attach('touch-disclosure-last-row', { body: await page.screenshot(), contentType: 'image/png' });
+    await summary.tap();
+    await expect(splits).toBeHidden();
+    await expectTourResultClear(page, recipientIndex);
+    await summary.tap();
+    await expect(splits).toBeVisible();
+    await expectTourResultClear(page, recipientIndex);
+    await page.getByRole('button', { name: 'Restart tour', exact: true }).tap();
+    await expect(page.locator('#tour-result')).toBeHidden();
+    await expect(page.locator('#stage canvas')).toBeFocused();
+    expect((await tourSnapshot(page)).index).toBe(0);
+    expect((await tourSnapshot(page)).tour.plan).toEqual(data.plan);
+    expect(errors).toEqual([]);
+    await cdp.detach();
+  } finally {
+    await context.close();
+  }
+});
 
 for (const viewport of [viewports[0], viewports[4], viewports[5]]) {
   test(`long-copy presentation, label avoidance and reduced motion at ${viewport.width}x${viewport.height}`, async ({
@@ -1027,21 +1306,25 @@ for (const viewport of [viewports[0], viewports[4], viewports[5]]) {
     });
     await expectNavigationVisibility(page, false);
     if (viewport.width <= 760 || viewport.height > 500) {
-      await page.evaluate(() => {
+      await page.evaluate(async () => {
         const { ui } = window.__presentation!;
-        ui.showTourResults(
-          90,
-          [
-            { stopId: 'bay', elapsed: 25, cumulative: 25 },
-            { stopId: 'station', elapsed: 30, cumulative: 55 },
-            { stopId: 'garden', elapsed: 35, cumulative: 90 },
-          ],
-          false,
-        );
-        ui.toast('All three parcels delivered. Keep exploring.');
+        const sessionPath = '/src/tour-session.ts';
+        const { TourSession } = (await import(sessionPath)) as typeof import('../../src/tour-session');
+        const session = new TourSession();
+        ui.setDestinations(session.destinations);
+        session.start();
+        // Synthetic docking exercises completed UI state, not route playability.
+        for (const destination of session.destinations) session.update(9, destination.normal, 0);
+        window.__presentation!.run = session;
+        ui.update(session, 0, 1, 0, 0);
+        ui.showTourResults(session.elapsed, session.splits, false, session.recordKey);
+        ui.toast('All ten parcels delivered. Keep exploring.');
       });
+      await expectNavigationVisibility(page, false);
       await expect(page.locator('#tour-result')).toBeVisible();
-      await expect(page.locator('#toast.visible')).toHaveText('All three parcels delivered. Keep exploring.');
+      await expect(page.locator('#tour-result-time')).toHaveText('01:30.0');
+      await expect(page.locator('#tour-splits li')).toHaveCount(10);
+      await expect(page.locator('#toast.visible')).toHaveText('All ten parcels delivered. Keep exploring.');
       await expect
         .poll(
           async () =>

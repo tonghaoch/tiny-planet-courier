@@ -1,8 +1,8 @@
 import { renderDeliveryQueue, renderUIShell } from './ui/template';
 import { DELIVERY_HOLD, DeliveryRun, formatTime, readBest } from './game';
 import { missionHint, driveStateLabel, type BayHUDState } from './ui/hints';
-import { PROTOTYPES, type PrototypeDefinition } from './delivery-prototypes';
-import { TOUR_RECORD_KEY, type TourSplit } from './tour-session';
+import type { PrototypeDefinition } from './delivery-prototypes';
+import type { TourSplit } from './tour-session';
 import type { Destination } from './math';
 import { advanceNavigationHeading, arrivalActive, type GuidanceMode } from './navigation-presentation';
 export { unwrapNavigationHeading } from './navigation-presentation';
@@ -25,6 +25,7 @@ export class UI {
   private targetId = '';
   private lastMode = '';
   private deliveryCount = 0;
+  private destinations: readonly Destination[] = [];
   private prototypeResultReady = false;
   private soundEnabled = false;
   private readonly elements = new Map<string, HTMLElement>();
@@ -52,6 +53,19 @@ export class UI {
     this.app.addEventListener('click', event => {
       const button = (event.target as HTMLElement).closest<HTMLElement>('[data-action]');
       if (button) this.onAction(button.dataset.action!);
+    });
+    const disclosure = this.app.querySelector<HTMLDetailsElement>('#tour-details');
+    disclosure?.addEventListener('toggle', () => this.invalidateGeometry());
+    disclosure?.addEventListener('keydown', event => {
+      // Preserve native disclosure/scroll keys without feeding them to driving input.
+      if (
+        (event.target instanceof HTMLElement &&
+          event.target.tagName === 'SUMMARY' &&
+          ['Space', 'Enter'].includes(event.code)) ||
+        (event.target === this.elements.get('tour-splits') &&
+          ['Space', 'ArrowUp', 'ArrowDown', 'Home', 'End', 'PageUp', 'PageDown'].includes(event.code))
+      )
+        event.stopPropagation();
     });
     const geometryObserver = new ResizeObserver(() => this.invalidateGeometry());
     this.app
@@ -228,6 +242,7 @@ export class UI {
   }
 
   setDestinations(destinations: Destination[]) {
+    this.destinations = destinations.slice();
     this.deliveryCount = destinations.length;
     this.hasTarget = destinations.length > 0;
     this.syncNavigationVisibility();
@@ -250,6 +265,7 @@ export class UI {
     this.elements.get('bay-result')!.hidden = true;
     this.elements.get('tour-result')!.hidden = true;
     this.elements.get('tour-splits')!.replaceChildren();
+    this.elements.get('tour-details')?.removeAttribute('open');
     clearTimeout(this.toastTimer);
     this.elements.get('toast')!.classList.remove('visible');
   }
@@ -396,7 +412,7 @@ export class UI {
   }
 
   private showPrototypeResults(elapsed: number, newRecord: boolean) {
-    if (!this.prototype) return;
+    if (!this.prototype || this.prototype.id === 'tour') return;
     this.prototypeResultReady = true;
     this.app.dataset.delivered = 'true';
     clearTimeout(this.toastTimer);
@@ -409,28 +425,30 @@ export class UI {
   }
 
   /** Nonblocking: use the session's completed splits, never an independent UI timer. */
-  showTourResults(elapsed: number, splits: readonly TourSplit[], newRecord: boolean) {
+  showTourResults(elapsed: number, splits: readonly TourSplit[], newRecord: boolean, recordKey: string) {
     if (this.prototype?.id !== 'tour') return;
     this.prototypeResultReady = true;
     this.app.dataset.delivered = 'true';
     clearTimeout(this.toastTimer);
     this.elements.get('toast')!.classList.remove('visible');
     this.text('tour-result-time', formatTime(elapsed, true));
-    const best = readBest(TOUR_RECORD_KEY);
+    const best = readBest(recordKey);
+    this.elements.get('tour-details')?.removeAttribute('open');
     this.text('tour-best-time', best === null ? '—' : formatTime(best, true));
     this.elements.get('tour-splits')!.replaceChildren(
       ...splits.map(split => {
         const row = document.createElement('li');
         const name = document.createElement('span');
-        name.textContent = PROTOTYPES[split.stopId].destinationName;
+        name.textContent = `${String(split.index + 1).padStart(2, '0')} · ${this.destinations[split.index].name}`;
         const time = document.createElement('strong');
         time.textContent = formatTime(split.elapsed, true);
         row.append(name, time);
         return row;
       }),
     );
-    this.text('tour-record-label', newRecord ? 'A new tour best!' : 'All three parcels delivered.');
+    this.text('tour-record-label', newRecord ? this.prototype.result.newRecord : this.prototype.result.delivered);
     this.elements.get('tour-result')!.hidden = this.lastMode !== 'playing';
+    this.invalidateGeometry();
   }
 
   toast(message: string) {

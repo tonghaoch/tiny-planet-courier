@@ -9,6 +9,8 @@ import { PlanetWorld } from '../world';
 import { buildBayScene } from './bay-scene';
 import { buildStationScene } from './station-scene';
 import { buildGardenScene } from './garden-scene';
+import { buildOutpostScene } from './outpost-scene';
+import { BEACON_LEVEL, DEPOT_LEVEL } from '../tour-outposts';
 import { material, PALETTE } from './scenery-primitives';
 
 function meshes(root: Object3D) {
@@ -31,6 +33,8 @@ function districtColliders(layout: TourLayout) {
     ...GARDEN_LEVEL.beds.map(bed => collider(2, bed.center, bed.radius)),
     collider(2, GARDEN_LEVEL.welcomeBed.center, GARDEN_LEVEL.welcomeBed.radius),
     collider(2, GARDEN_LEVEL.windmill.center, GARDEN_LEVEL.windmill.colliderRadius),
+    collider(3, BEACON_LEVEL.landmark.center, BEACON_LEVEL.landmark.colliderRadius),
+    collider(4, DEPOT_LEVEL.landmark.center, DEPOT_LEVEL.landmark.colliderRadius),
   ];
 }
 
@@ -81,6 +85,8 @@ describe('world scenery extraction safeguards', () => {
     const bay = buildBayScene(layout.stops[0].level, context);
     const station = buildStationScene(layout.stops[1].level, context);
     const garden = buildGardenScene(layout.stops[2].level, context);
+    const beacon = buildOutpostScene(layout.stops[3].level, context);
+    const depot = buildOutpostScene(layout.stops[4].level, context);
     expect(context.colliders).toBe(colliders);
     expect(colliders[0]).toBe(sentinel);
     expect(colliders.slice(1)).toEqual(districtColliders(layout));
@@ -97,7 +103,14 @@ describe('world scenery extraction safeguards', () => {
       'garden-windmill',
     ])
       expect(root.getObjectByName(name)!.parent).toBe(root);
-    for (const dynamic of [...bay.dynamicRoots, ...station.dynamicRoots, ...garden.dynamicRoots, garden.rotor]) {
+    for (const dynamic of [
+      ...bay.dynamicRoots,
+      ...station.dynamicRoots,
+      ...garden.dynamicRoots,
+      ...beacon.dynamicRoots,
+      ...depot.dynamicRoots,
+      garden.rotor,
+    ]) {
       const batchedWorldRoot = world.root.getObjectByName(dynamic.name)!;
       expect(batchedWorldRoot.parent!.name).toBe(dynamic.parent!.name);
       // The real World must retain every animated mesh, not merely empty named groups.

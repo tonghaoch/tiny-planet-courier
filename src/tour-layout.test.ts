@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { Vector3 } from 'three';
+import { CubicBezierCurve3, Vector3 } from 'three';
 import { AuthoredLevel, densify, point } from './authored-level';
 import { BAY_LEVEL, BayLevel } from './bay-level';
 import { STATION_LEVEL, StationLevel } from './station-level';
@@ -7,6 +7,9 @@ import { GARDEN_LEVEL, GardenLevel } from './garden-level';
 import { BayDrive } from './bay-driving';
 import { TourLayout } from './tour-layout';
 import { TourSession } from './tour-session';
+import { DeliveryRun } from './game';
+import { createTourPlan, TOUR_LOCATION_IDS } from './tour-itinerary';
+import { BEACON_LEVEL, DEPOT_LEVEL } from './tour-outposts';
 import { projectOnRoute } from './route-guidance';
 import { advanceOnSphere, headingTo, PLANET_RADIUS, spherical, surfaceDistance, tangent, type Collider } from './math';
 import { createBayPilot } from '../tests/helpers/bay-pilot';
@@ -23,6 +26,9 @@ function authoredColliders(layout: TourLayout): Collider[] {
     ...STATION_LEVEL.obstacles.map(o => collider(station, o.center, o.radius)),
     collider(garden, GARDEN_LEVEL.windmill.center, GARDEN_LEVEL.windmill.colliderRadius),
     ...[...GARDEN_LEVEL.beds, GARDEN_LEVEL.welcomeBed].map(o => collider(garden, o.center, o.radius)),
+    ...[BEACON_LEVEL, DEPOT_LEVEL].map((definition, i) =>
+      collider(layout.stops[i + 3].level, definition.landmark.center, definition.landmark.colliderRadius),
+    ),
   ];
 }
 
@@ -71,12 +77,60 @@ describe('Tour placement and shared road geometry', () => {
     expect(defaults[0].route(BAY_LEVEL.safeRouteCenterline)).toEqual(new BayLevel().safeRoute);
     expect(layout.stops[0].level.safeRoute).toEqual(layout.stops[0].level.route(BAY_LEVEL.safeRouteCenterline));
     expect(layout.stops[0].level.jumpRoute).toEqual(layout.stops[0].level.route(BAY_LEVEL.jumpRouteCenterline));
-    expect(layout.stops.map(s => s.level.definition.anchor)).toEqual([
+    expect(layout.stops.slice(0, 3).map(s => s.level.definition.anchor)).toEqual([
       { latitude: 20, longitude: 0 },
       { latitude: -8, longitude: 125 },
       { latitude: 28, longitude: -115 },
     ]);
     expect(JSON.stringify([BAY_LEVEL, STATION_LEVEL, GARDEN_LEVEL])).toBe(before);
+  });
+
+  it('retains every exact northern connector sample from the three-stop construction', () => {
+    const layout = new TourLayout();
+    const exits = [13.5, 5, 5.5];
+    const entries = [-12.5, -14.5, -16.5];
+    for (let index = 0; index < 3; index++) {
+      const from = layout.stops[index].level;
+      const toIndex = (index + 1) % 3;
+      const to = layout.stops[toIndex].level;
+      const exit = from.toNormal(exits[index], 0);
+      const entry = to.toNormal(entries[toIndex], 0);
+      const departure = tangent(from.toNormal(exits[index] + 0.01, 0), exit);
+      const arrival = tangent(to.toNormal(entries[toIndex] + 0.01, 0), entry);
+      const handle = Math.min(5, surfaceDistance(exit, entry) / 3);
+      const exterior = new CubicBezierCurve3(
+        exit.clone().multiplyScalar(PLANET_RADIUS),
+        exit.clone().multiplyScalar(PLANET_RADIUS).addScaledVector(departure, handle),
+        entry.clone().multiplyScalar(PLANET_RADIUS).addScaledVector(arrival, -handle),
+        entry.clone().multiplyScalar(PLANET_RADIUS),
+      )
+        .getPoints(80)
+        .map(n => n.normalize());
+      const nodes = [
+        ...from.route([from.definition.pad.center, point(exits[index], 0)]),
+        ...exterior.slice(1),
+        ...to.route([point(entries[toIndex], 0), to.definition.spawn.position]).slice(1),
+      ];
+      const expected = [nodes[0].clone()];
+      for (let i = 1; i < nodes.length; i++) {
+        const a = nodes[i - 1],
+          b = nodes[i];
+        const angle = surfaceDistance(a, b) / PLANET_RADIUS;
+        const steps = Math.max(1, Math.ceil((angle * PLANET_RADIUS) / 0.22));
+        const direction = tangent(b, a);
+        for (let j = 1; j <= steps; j++)
+          expected.push(
+            j === steps
+              ? b.clone()
+              : a
+                  .clone()
+                  .multiplyScalar(Math.cos((angle * j) / steps))
+                  .addScaledVector(direction, Math.sin((angle * j) / steps))
+                  .normalize(),
+          );
+      }
+      expect(layout.connectors[index]).toEqual({ from: index, to: toIndex, width: 1.8, path: expected });
+    }
   });
 
   it('takes ownership of anchor overrides without mutating callers or global defaults', () => {
@@ -93,12 +147,12 @@ describe('Tour placement and shared road geometry', () => {
 
   it('keeps relocated footprints disjoint, with more than six units between sampled boundaries', () => {
     const layout = new TourLayout();
-    const boundaries = layout.stops.map(({ level }) => {
+    const boundaries = layout.stops.slice(0, 3).map(({ level }) => {
       const polygon = level.definition.footprintPolygon;
       return level.route([...polygon, polygon[0]]);
     });
     let gap = Infinity;
-    layout.stops.forEach(({ level }, index) => {
+    layout.stops.slice(0, 3).forEach(({ level }, index) => {
       for (let x = -16; x <= 14; x += 0.5)
         for (let y = -8; y <= 10; y += 0.5) {
           const normal = level.toNormal(x, y);
@@ -123,6 +177,9 @@ describe('Tour placement and shared road geometry', () => {
       [0, 1],
       [1, 2],
       [2, 0],
+      [1, 4],
+      [4, 3],
+      [3, 1],
     ]);
     for (const connector of layout.connectors) {
       expect(connector.path[0]).toEqual(layout.stops[connector.from].destination.normal);
@@ -266,14 +323,214 @@ describe('Tour route-aware navigation', () => {
   });
 });
 
+describe('five-site directed routing and physical expansion', () => {
+  it('composes all 20 ordered pairs and every spawn departure with stable paths', () => {
+    const layout = new TourLayout();
+    for (const from of ['spawn', ...TOUR_LOCATION_IDS] as const)
+      for (const to of TOUR_LOCATION_IDS) {
+        if (from === to) continue;
+        for (const variant of ['wide', 'short'] as const) {
+          const path = layout.routeBetween(from, to, variant);
+          expect(path).toBe(layout.routeBetween(from, to, variant));
+          expect(path[0]).toEqual(
+            from === 'spawn' ? layout.spawnPose.normal : layout.location(from).destination.normal,
+          );
+          expect(path.at(-1)).toEqual(layout.location(to).destination.normal);
+          for (let i = 1; i < path.length; i++)
+            expect(surfaceDistance(path[i - 1], path[i])).toBeLessThanOrEqual(0.220001);
+          if (variant === 'wide') for (const normal of path) expect(layout.sampleSurface(normal).kind).toBe('road');
+          const edges = layout.connectorsBetween(from === 'spawn' ? 'bay' : from, to);
+          edges.forEach((edge, i) => {
+            if (i) expect(edge.from).toBe(edges[i - 1].to);
+            expect(path.some(normal => normal.distanceTo(edge.path[0]) < 1e-12)).toBe(true);
+            expect(path.some(normal => normal.distanceTo(edge.path.at(-1)!) < 1e-12)).toBe(true);
+          });
+        }
+      }
+    for (let seed = 0; seed < 20; seed++) {
+      const session = new TourSession(layout, createTourPlan(seed));
+      for (let index = 0; index < 10; index++) {
+        const path = session.routeForLeg(index, 'wide');
+        expect(path).toBe(session.routeForLeg(index, 'wide'));
+        expect(path.at(-1)).toEqual(session.destinations[index].normal);
+      }
+    }
+  });
+
+  it('keeps all five footprints disjoint and connector round caps dry and clear', () => {
+    const layout = new TourLayout();
+    const colliders = authoredColliders(layout);
+    let gap = Infinity;
+    const boundaries = layout.stops.map(({ level }) =>
+      level.route([...level.definition.footprintPolygon, level.definition.footprintPolygon[0]]),
+    );
+    for (let i = 0; i < layout.stops.length; i++) {
+      for (const normal of boundaries[i]) {
+        expect(layout.stops.filter(stop => stop.level.isInFootprint(normal))).toHaveLength(1);
+        for (let j = i + 1; j < boundaries.length; j++)
+          for (const other of boundaries[j]) gap = Math.min(gap, surfaceDistance(normal, other));
+      }
+    }
+    expect(gap).toBeGreaterThan(1.8);
+    for (const connector of layout.connectors)
+      for (const normal of [connector.path[0], connector.path.at(-1)!]) {
+        const forward = tangent(new Vector3(0, 1, 0), normal);
+        for (let angle = 0; angle < Math.PI * 2; angle += Math.PI / 12) {
+          const edge = normal.clone();
+          advanceOnSphere(edge, forward.clone().applyAxisAngle(normal, angle), connector.width / 2);
+          expect(layout.sampleSurface(edge).kind).toBe('road');
+          expect(layout.isInSceneryClearance(edge)).toBe(true);
+          for (const collider of colliders)
+            expect(surfaceDistance(edge, collider.normal)).toBeGreaterThan(collider.radius + 0.05);
+        }
+      }
+  });
+
+  it('records actual road length, latitude extent, and new road outside old corridors', () => {
+    const layout = new TourLayout();
+    const length = (path: Vector3[]) => path.reduce((sum, n, i) => sum + (i ? surfaceDistance(path[i - 1], n) : 0), 0);
+    const localRoads = layout.stops.map(stop =>
+      Object.values(stop.level.definition.roads).map(road => stop.level.route(road.centerline)),
+    );
+    const oldPaths = [...layout.connectors.slice(0, 3).map(c => c.path), ...localRoads.slice(0, 3).flat()];
+    const newPaths = [...layout.connectors.slice(3).map(c => c.path), ...localRoads.slice(3).flat()];
+    const extent = (paths: Vector3[][]) => {
+      const latitudes = paths.flat().map(n => (Math.asin(n.y) * 180) / Math.PI);
+      return [Math.min(...latitudes), Math.max(...latitudes)];
+    };
+    let outside = 0;
+    for (const path of newPaths)
+      for (let i = 1; i < path.length; i++) {
+        const midpoint = path[i - 1].clone().add(path[i]).normalize();
+        const inOld =
+          layout.stops.slice(0, 3).some(stop => stop.level.isInFootprint(midpoint)) ||
+          layout.connectors.slice(0, 3).some(c => projectOnRoute(midpoint, c.path).distance <= c.width / 2);
+        if (!inOld) outside += surfaceDistance(path[i - 1], path[i]);
+      }
+    const metrics = {
+      baselineRoadLength: oldPaths.reduce((sum, path) => sum + length(path), 0),
+      addedRoadLength: newPaths.reduce((sum, path) => sum + length(path), 0),
+      baselineLatitude: extent(oldPaths),
+      expandedLatitude: extent([...oldPaths, ...newPaths]),
+      addedLengthOutsideOldFootprintsAndCorridors: outside,
+    };
+    console.info('Tour physical metrics (authored centerline sums, shared branches counted):', JSON.stringify(metrics));
+    expect(metrics.addedRoadLength).toBeGreaterThan(50);
+    expect(metrics.addedLengthOutsideOldFootprintsAndCorridors).toBeGreaterThan(40);
+    expect(metrics.expandedLatitude[0]).toBeLessThan(metrics.baselineLatitude[0] - 10);
+  });
+
+  it('keys navigation by plan/occurrence and chooses Bay coast/leap on repeated arrivals', () => {
+    const layout = new TourLayout();
+    const plan = createTourPlan(0);
+    const index = plan.order.lastIndexOf('bay');
+    const bay = layout.stops[0].level;
+    for (const [normal, route] of [
+      [bay.toNormal(-4, 0), 'leap'],
+      [bay.toNormal(-3, 5), 'coast'],
+    ] as const) {
+      const navigation = layout.navigation(index, normal, null, true, {}, plan);
+      expect(navigation.route.bayRoute).toBe(route);
+      expect(navigation.route.cursor?.path).toBe(layout.routeForLeg(index, route === 'coast' ? 'wide' : 'short', plan));
+      const other = createTourPlan(1);
+      const changed = layout.navigation(index, normal, navigation.route, true, {}, other);
+      expect(changed.route.legKey).not.toBe(navigation.route.legKey);
+    }
+  });
+
+  it.each(
+    TOUR_LOCATION_IDS.flatMap(from => TOUR_LOCATION_IDS.filter(to => to !== from).map(to => [from, to] as const)),
+  )('drives %s -> %s with real inputs through safe intermediate locales', (from, to) => {
+    const layout = new TourLayout();
+    const environment = layout.createEnvironment(authoredColliders(layout));
+    // Initialize this independent leg at its departure pad; never teleport between waypoints.
+    environment.spawnPose = layout.location(from).deliveredPose;
+    const drive = new BayDrive(environment);
+    const destination = layout.location(to).destination;
+    const run = new DeliveryRun([destination]);
+    run.start();
+    const pilot = tourPilot(drive, layout.routeBetween(from, to, 'wide'), destination.normal, false);
+    let collisions = 0;
+    for (let tick = 0; tick < 120 * 180 && !run.finished; tick++) {
+      collisions += drive.update(1 / 120, pilot()).filter(event => event.type === 'collision').length;
+      run.update(1 / 120, drive.normal, drive.speed, drive.altitude, drive.phase === 'grounded');
+    }
+    expect(run.finished, `${from}->${to}: ${JSON.stringify(layout.location(to).level.toLocal(drive.normal))}`).toBe(
+      true,
+    );
+    expect(collisions).toBe(0);
+    expect(drive.recoveries).toBe(0);
+    expect(drive.jumps).toBe(0);
+  });
+
+  it.each(TOUR_LOCATION_IDS)('drives the actual Bay spawn to first target %s', to => {
+    const layout = new TourLayout();
+    const drive = new BayDrive(layout.createEnvironment(authoredColliders(layout)));
+    const destination = layout.location(to).destination;
+    const run = new DeliveryRun([destination]);
+    run.start();
+    const pilot = tourPilot(drive, layout.routeBetween('spawn', to, 'wide'), destination.normal, false);
+    let collisions = 0;
+    for (let tick = 0; tick < 120 * 180 && !run.finished; tick++) {
+      collisions += drive.update(1 / 120, pilot()).filter(event => event.type === 'collision').length;
+      run.update(1 / 120, drive.normal, drive.speed, drive.altitude, drive.phase === 'grounded');
+    }
+    expect(run.finished).toBe(true);
+    expect(collisions).toBe(0);
+    expect(drive.recoveries).toBe(0);
+  });
+});
+
 describe('continuous Tour routes using the accepted controller and real inputs', () => {
+  it.each([0, 1])('drives all ten deliveries for seed %s without resetting motion at handoffs', seed => {
+    const layout = new TourLayout();
+    const environment = layout.createEnvironment(authoredColliders(layout));
+    const drive = new BayDrive(environment);
+    const session = new TourSession(layout, createTourPlan(seed));
+    session.start();
+    let collisions = 0;
+    for (let leg = 0; leg < 10; leg++) {
+      const destination = session.target!.normal;
+      const pilot = tourPilot(drive, session.routeForLeg(leg, 'wide'), destination, false);
+      for (let tick = 0; tick < 120 * 180 && session.index === leg; tick++) {
+        collisions += drive.update(1 / 120, pilot()).filter(event => event.type === 'collision').length;
+        session.updateLocation(drive.normal, drive.phase === 'grounded');
+        const before = { normal: drive.normal.clone(), forward: drive.forward.clone(), speed: drive.speed };
+        const event = session.update(1 / 120, drive.normal, drive.speed, drive.altitude, drive.phase === 'grounded');
+        if (event) {
+          expect(drive.normal).toEqual(before.normal);
+          expect(drive.forward).toEqual(before.forward);
+          expect(drive.speed).toBe(before.speed);
+          expect(event.locationId).toBe(session.plan.order[leg]);
+        }
+        environment.recoveryPose = session.checkpoint.pose;
+      }
+      expect(
+        session.index,
+        `seed ${seed}, leg ${leg}, at ${JSON.stringify(layout.stops.map(s => s.level.toLocal(drive.normal)))}`,
+      ).toBe(leg + 1);
+      expect(session.finished).toBe(leg === 9);
+      expect(collisions).toBe(0);
+      expect(drive.recoveries).toBe(0);
+    }
+    expect(session.splits).toHaveLength(10);
+    expect(session.splits.reduce((sum, split) => sum + split.elapsed, 0)).toBeCloseTo(session.elapsed, 12);
+    const finishedTime = session.elapsed;
+    for (let tick = 0; tick < 120; tick++) {
+      drive.update(1 / 120, { throttle: 1, steer: 0, boost: false });
+      session.update(1 / 120, drive.normal, drive.speed, drive.altitude, drive.phase === 'grounded');
+    }
+    expect(session.elapsed).toBe(finishedTime);
+    expect(session.navigation(drive.normal, null, true).target).toEqual(session.destinations[9].normal);
+  });
+
   it.each(['wide', 'short'] as const)(
     'drives all %s legs and the closing connector without teleport or recovery',
     variant => {
       const layout = new TourLayout();
       const environment = layout.createEnvironment(authoredColliders(layout));
       const drive = new BayDrive(environment);
-      const session = new TourSession(layout);
+      const session = new DeliveryRun(layout.destinations.slice(0, 3), { keepDrivingOnFinish: true });
       session.start();
       let collisions = 0;
       const collisionLocations: unknown[] = [];
@@ -289,9 +546,7 @@ describe('continuous Tour routes using the accepted controller and real inputs',
           collisions += events.filter(event => event.type === 'collision').length;
           for (const event of events.filter(event => event.type === 'collision'))
             collisionLocations.push({ leg, local: layout.stops.map(s => s.level.toLocal(event.normal)) });
-          session.updateLocation(drive.normal, drive.phase === 'grounded');
           session.update(1 / 120, drive.normal, drive.speed, drive.altitude, drive.phase === 'grounded');
-          environment.recoveryPose = session.checkpoint.pose;
         }
         expect(session.index, `leg ${leg}, at ${JSON.stringify(layout.stops[leg].level.toLocal(drive.normal))}`).toBe(
           leg + 1,
@@ -300,7 +555,7 @@ describe('continuous Tour routes using the accepted controller and real inputs',
         expect(collisions, JSON.stringify(collisionLocations)).toBe(0);
       }
       expect(session.finished).toBe(true);
-      expect(session.splits).toHaveLength(3);
+      expect(session.index).toBe(3);
       expect(drive.jumps).toBe(variant === 'short' ? 1 : 0);
       const time = session.elapsed;
       const closing = layout.connectors[2];

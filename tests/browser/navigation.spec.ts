@@ -8,7 +8,13 @@ import { BayLevel } from '../../src/bay-level';
 import { StationLevel } from '../../src/station-level';
 import { GardenLevel } from '../../src/garden-level';
 import { TourLayout } from '../../src/tour-layout';
-import { createTourPilot } from '../helpers/tour-pilot';
+import {
+  startTourBrowserDriver,
+  stopTourBrowserDriver,
+  tourBrowserDriverStatus,
+  summarizeTourDriverTelemetry,
+} from '../helpers/tour-browser-driver';
+import { createTourPlan } from '../../src/tour-itinerary';
 
 const snapshot = (page: Page) =>
   page.evaluate(() => {
@@ -47,7 +53,7 @@ function expectDestinationBearing(state: PlanetTestSnapshot, destination: number
 }
 
 async function load(page: Page, mode: string) {
-  await page.goto(`/?test=1&prototype=${mode}`);
+  await page.goto(`/?test=1&prototype=${mode}&tourSeed=227`);
   await expect(page.locator('#app')).toHaveAttribute('data-ready', 'true');
   await page.getByRole('button', { name: 'Start delivering', exact: true }).click();
 }
@@ -428,7 +434,7 @@ test('Tour handoff fixtures retarget the destination but keep reverse-to-exit ro
         level.toNormal(position.x + Math.cos(heading) * 0.01, position.y + Math.sin(heading) * 0.01),
         normal,
       );
-      const road = layout.navigation(index, normal, null, true, { forward });
+      const road = layout.navigation(index, normal, null, true, { forward }, createTourPlan(227));
       const roadBehind = Math.abs(headingTo(normal, forward, road.target)) > Math.PI / 2;
       const destinationBehind = Math.abs(headingTo(normal, forward, destination.normal)) > Math.PI / 2;
       if (roadBehind !== destinationBehind) headings.set(`${roadBehind}:${destinationBehind}`, heading);
@@ -450,7 +456,7 @@ test('Tour handoff fixtures retarget the destination but keep reverse-to-exit ro
       expectDestinationBearing(state, destination.normal.toArray());
       const normal = vector(state.guidance!.normal),
         forward = vector(state.guidance!.forward);
-      const road = layout.navigation(index, normal, null, true, { forward });
+      const road = layout.navigation(index, normal, null, true, { forward }, createTourPlan(227));
       const roadBearing = headingTo(normal, forward, road.target);
       const roadBehind = Math.abs(roadBearing) > Math.PI / 2;
       const destinationBehind = Math.abs(state.guidance!.canonicalHeading!) > Math.PI / 2;
@@ -467,6 +473,35 @@ test('Tour handoff fixtures retarget the destination but keep reverse-to-exit ro
     await expect(page.locator('#direction-arrow')).toBeVisible();
     expectDestinationBearing(await snapshot(page), destination.normal.toArray());
   }
+});
+
+test('Tour repeated occurrences keep direct target equality and local fixture identity across all five sites', async ({
+  page,
+}) => {
+  await load(page, 'tour');
+  const layout = new TourLayout();
+  const plan = createTourPlan(227);
+  for (const [index, id] of plan.order.entries()) {
+    const destination = layout.location(id).destination;
+    const before = await snapshot(page);
+    expect(before.index).toBe(index);
+    expect(before.tour!.currentLocationId).toBe(id);
+    expectDestinationBearing(before, destination.normal.toArray());
+    for (const heading of [0, Math.PI / 2, Math.PI]) {
+      await setNavigationFixture(page, { targetOffset: 2, heading, reset: true });
+      const state = await snapshot(page);
+      expectDestinationBearing(state, destination.normal.toArray());
+      expect(state.missionName).toBe(destination.name);
+      const local = state.tour!.locals[layout.stops.findIndex(site => site.id === id)];
+      const expectedLocal = layout.location(id).level.toLocal(vector(state.normal));
+      expect(local.x).toBeCloseTo(expectedLocal.x, 10);
+      expect(local.y).toBeCloseTo(expectedLocal.y, 10);
+    }
+    await dockAtTarget(page);
+    await expect.poll(async () => (await snapshot(page)).index).toBe(index + 1);
+  }
+  await expect(page.locator('#navigation-hud')).toBeHidden();
+  expect((await snapshot(page)).tour!.handoffs.map(event => event.locationId)).toEqual(plan.order);
 });
 
 test('original-game compass tracks driving, turning and destination handoffs', async ({ page }) => {
@@ -525,55 +560,58 @@ test('real unboosted Bay splash uses a non-steering recovery cue then restores g
 /** Route fixtures choose the road; the HUD remains a destination compass.
  * This travel check supplies only real controller inputs, never pose fixtures. */
 async function driveRouteWithCompass(page: Page, legs: { index: number; destination: number[]; path: number[][] }[]) {
-  let previous = await snapshot(page);
+  let previous: PlanetTestSnapshot = await snapshot(page);
   const branches = new Set<string>(),
     phases = new Set<string>();
   let count = 0;
   for (const leg of legs) {
-    const pilot = createTourPilot(leg.path.map(vector), vector(leg.destination), false);
     const deadline = Date.now() + 85000;
     let delivered = false;
-    while (Date.now() < deadline) {
-      const state = await snapshot(page),
-        g = state.guidance!;
-      expect(state.recoveries).toBe(0);
-      expect(state.events).not.toContain('collision');
-      expect(surfaceDistance(vector(previous.normal), vector(state.normal))).toBeLessThan(
-        (state.elapsed - previous.elapsed) * 8.5 + 0.45,
-      );
-      if (state.index > leg.index) {
-        expect(state.index).toBe(leg.index + 1);
-        if (state.target) expectDestinationBearing(state, legs[state.index].destination);
-        await setPlanetControls(page, null);
+    await startTourBrowserDriver(page, leg);
+    try {
+      while (Date.now() < deadline) {
+        const driver = await tourBrowserDriverStatus(page);
+        expect(driver.error, JSON.stringify(driver)).toBeNull();
+        const state = driver.latest,
+          g = state.guidance!;
+        expect(state.recoveries).toBe(0);
+        expect(state.events).not.toContain('collision');
+        expect(surfaceDistance(vector(previous.normal), vector(state.normal))).toBeLessThan(
+          (state.elapsed - previous.elapsed) * 8.5 + 0.45,
+        );
+        if (state.index > leg.index) {
+          expect(state.index).toBe(leg.index + 1);
+          // Seed 227 preserves the original wide Station -> Garden reverse departure.
+          if (state.tour && leg.index === 2) expect(driver.reversed).toBe(true);
+          console.log(
+            `Navigation leg ${leg.index} driver: ${JSON.stringify(summarizeTourDriverTelemetry(driver.telemetry))}`,
+          );
+          if (state.target) expectDestinationBearing(state, legs[state.index].destination);
+          await setPlanetControls(page, null);
+          previous = state;
+          delivered = true;
+          break;
+        }
+        expectDestinationBearing(state, leg.destination);
+        branches.add(`${state.index}:${g.branch}`);
+        phases.add(`${state.index}:${g.phase}`);
+        expect(state.missionDistance).toBe(`${Math.round(g.distance * 10)} m`);
         previous = state;
-        delivered = true;
-        break;
+        count++;
+        await page.waitForTimeout(40);
       }
-      expectDestinationBearing(state, leg.destination);
-      branches.add(`${state.index}:${g.branch}`);
-      phases.add(`${state.index}:${g.phase}`);
-      expect(state.missionDistance).toBe(`${Math.round(g.distance * 10)} m`);
-      const input = pilot({
-        ...state,
-        phase: state.phase!,
-        jumps: state.jumps!,
-        recoveries: state.recoveries!,
-        normal: vector(state.normal),
-        forward: vector(state.forward),
-      });
-      await setPlanetControls(page, input);
-      previous = state;
-      count++;
-      await page.waitForTimeout(40);
+      expect(delivered, `Route fixture leg ${leg.index}: ${JSON.stringify(await snapshot(page))}`).toBe(true);
+    } finally {
+      await stopTourBrowserDriver(page);
     }
-    expect(delivered, `Route fixture leg ${leg.index}: ${JSON.stringify(await snapshot(page))}`).toBe(true);
   }
   return { state: await snapshot(page), branches: [...branches], phases: [...phases], count };
 }
 
 for (const mode of ['bay', 'station', 'garden', 'tour']) {
   test(`real route-fixture controller drives ${mode} while the compass points to each delivery`, async ({ page }) => {
-    test.setTimeout(mode === 'tour' ? 300000 : 100000);
+    // Ten complete cross-planet legs retain the original 85s per-leg driving deadline.
+    test.setTimeout(mode === 'tour' ? 900000 : 100000);
     await load(page, mode);
     const routes = await planetRoutes(page);
     if (!routes) throw new Error('Expected authored route fixtures.');
@@ -590,7 +628,7 @@ for (const mode of ['bay', 'station', 'garden', 'tour']) {
       expect(result.phases).toEqual(
         expect.arrayContaining(['0:local', '1:transfer', '1:local', '2:transfer', '2:local']),
       );
-      expect(result.state.tour!.splits).toHaveLength(3);
+      expect(result.state.tour!.splits).toHaveLength(10);
     }
     await expect(page.locator('#navigation-hud')).toBeHidden();
     expect(result.state.guidance!.target).toBeNull();

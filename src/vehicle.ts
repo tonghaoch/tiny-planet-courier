@@ -36,7 +36,7 @@ export class Vehicle {
   private readonly frontWheels: THREE.Group[] = [];
   private readonly parcel = new THREE.Group();
   private readonly parcels: THREE.Group[] = [this.parcel];
-  private cargoCapacity: 1 | 3 = 1;
+  private cargoCapacity: 1 | 3 | 10 = 1;
   private readonly dust: THREE.Mesh[] = [];
   private readonly dustLives: number[] = [];
   private dustCursor = 0;
@@ -112,12 +112,6 @@ export class Vehicle {
     box(0.075, 0.25, 0.36, cream, [0, 0, 0], this.parcel);
     box(0.17, 0.1, 0.006, cream, [0.07, 0, 0.18], this.parcel);
     this.body.add(this.parcel);
-    for (let i = 1; i < 3; i++) {
-      const extra = this.parcel.clone(true);
-      extra.visible = false;
-      this.parcels.push(extra);
-      this.body.add(extra);
-    }
     for (const x of [-0.35, 0.35]) {
       for (const z of [-0.36, 0.38]) {
         const axle = new THREE.Group();
@@ -202,18 +196,28 @@ export class Vehicle {
     return this.landingMarker.visible;
   }
 
-  /** Select the small Tour rack or the original single parcel; refill on a fresh run. */
-  setCargoCapacity(capacity: 1 | 3) {
+  /** Lazily share parcel geometry in a bounded rack; solo geometry stays unchanged. */
+  setCargoCapacity(capacity: 1 | 3 | 10) {
     this.cargoCapacity = capacity;
+    while (this.parcels.length < capacity) {
+      const extra = this.parcel.clone(true);
+      this.parcels.push(extra);
+      this.body.add(extra);
+    }
     this.parcels.forEach((parcel, i) => {
-      parcel.scale.setScalar(capacity === 3 ? 0.62 : 1);
+      parcel.scale.setScalar(capacity === 10 ? 0.4 : capacity === 3 ? 0.62 : 1);
       parcel.position.set(
-        capacity === 3 ? [-0.17, 0.17, 0][i] : 0,
-        0.97,
-        capacity === 3 ? [-0.21, -0.21, 0.12][i] : -0.1,
+        capacity === 10 ? (i % 2 ? 0.13 : -0.13) : capacity === 3 ? ([-0.17, 0.17, 0][i] ?? 0) : 0,
+        this.parcelHeight,
+        capacity === 10 ? -0.27 + Math.floor(i / 2) * 0.155 : capacity === 3 ? ([-0.21, -0.21, 0.12][i] ?? -0.1) : -0.1,
       );
+      parcel.rotation.set(0, 0, 0);
     });
     this.setCargoVisible(true);
+  }
+
+  private get parcelHeight() {
+    return this.cargoCapacity === 10 ? 0.94 : 0.97;
   }
 
   setCargoVisible(visible: boolean) {
@@ -385,7 +389,7 @@ export class Vehicle {
         dt,
       );
       this.body.position.y = -prototype.impact * 0.065 * motionScale;
-      this.parcel.position.y = 0.97 + prototype.impact * 0.13 * motionScale;
+      this.parcel.position.y = this.parcelHeight + prototype.impact * 0.13 * motionScale;
       this.parcel.rotation.z =
         (Math.sin(time * 8) * Math.abs(this.speed) * 0.006 + this.body.rotation.z * 0.2) * motionScale;
       this.axles.forEach(axle => (axle.position.y = 0.2 - this.body.position.y));

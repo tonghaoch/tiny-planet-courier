@@ -3,6 +3,9 @@ import type { AuthoredLevel } from '../authored-level';
 import type { BayPoint } from '../bay-level';
 import { GardenLevel } from '../garden-level';
 import { StationLevel } from '../station-level';
+import { BayLevel } from '../bay-level';
+import { BeaconLevel, DepotLevel } from '../tour-outposts';
+import type { TourStopId } from '../tour-layout';
 import { PALETTE, material, mesh } from './scenery-primitives';
 
 /** Triangulate in authored coordinates, then split every long chord before projection.
@@ -72,8 +75,13 @@ export function localeFrame(
   return group;
 }
 
-export function localePrefix(level: AuthoredLevel): 'bay' | 'station' | 'garden' {
-  return level instanceof GardenLevel ? 'garden' : level instanceof StationLevel ? 'station' : 'bay';
+export function localePrefix(level: AuthoredLevel): TourStopId {
+  if (level instanceof BayLevel) return 'bay';
+  if (level instanceof StationLevel) return 'station';
+  if (level instanceof GardenLevel) return 'garden';
+  if (level instanceof BeaconLevel) return 'beacon';
+  if (level instanceof DepotLevel) return 'depot';
+  throw new Error('Unknown authored locale');
 }
 
 export function localeArrow(

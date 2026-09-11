@@ -5,11 +5,13 @@ import './style.css';
 import { AudioFeedback } from './audio';
 import type { BayDriveEvent } from './bay-types';
 import { DeliveryRun, saveBest } from './game';
-import { selectPrototype } from './delivery-prototypes';
+import { selectPrototype, selectTourSeed } from './delivery-prototypes';
 import type { RoadRoute } from './road-level';
 import type { BayRoute } from './bay-level';
 import type { RouteCursor } from './route-guidance';
-import { TourSession, TOUR_RECORD_KEY } from './tour-session';
+import { TourSession } from './tour-session';
+import { createTourPlan } from './tour-itinerary';
+import type { PlanetTestHandoff } from './dev/test-bridge-types';
 import type { TourRouteCache } from './tour-layout';
 import { Input } from './input';
 import { headingTo, PLANET_RADIUS, surfaceDistance } from './math';
@@ -71,15 +73,22 @@ try {
   if (roadLevel) sun.position.copy(roadLevel.toNormal(-5, 8)).multiplyScalar(55);
   scene.add(world.root);
   const vehicle = new Vehicle(scene, world.drivingEnvironment, reducedMotion);
-  const tour = tourLayout ? new TourSession(tourLayout) : null;
+  const offeredPlan = () =>
+    createTourPlan(selectTourSeed(import.meta.env.DEV ? location.search : '', import.meta.env.DEV));
+  const tour = tourLayout ? new TourSession(tourLayout, offeredPlan()) : null;
   const run = tour ?? new DeliveryRun(world.destinations, { keepDrivingOnFinish: authoredPrototype });
   if (tour) {
-    vehicle.setCargoCapacity(3);
+    vehicle.setCargoCapacity(10);
     world.setTourRecoveryPose(tour.checkpoint.pose);
   }
   const sound = new AudioFeedback();
-  ui.setDestinations(world.destinations);
-  world.setActiveDestination(0);
+  ui.setDestinations(run.destinations);
+  activateTarget();
+
+  function activateTarget() {
+    if (tour) world.setActiveLocation(tour.currentLocationId ?? null);
+    else world.setActiveDestination(run.index);
+  }
 
   const cameraRig = new CameraRig(camera, prototype?.id ?? null, reducedMotion);
   let width = window.innerWidth;
@@ -112,15 +121,7 @@ try {
   } | null = null;
   let tourRoute: TourRouteCache | null = null;
   let tourNavigationPhase: 'transfer' | 'local' = 'local';
-  const handoffs: {
-    index: number;
-    origin: number[];
-    normal: number[];
-    forward: number[];
-    speed: number;
-    charge: number;
-    remaining: number;
-  }[] = [];
+  const handoffs: PlanetTestHandoff[] = [];
   let testControls: Controls | null = null;
   const recentDriveEvents: string[] = [];
 
@@ -160,7 +161,7 @@ try {
     syncTourCheckpoint();
     vehicle.reset();
     world.resetDelivery();
-    world.setActiveDestination(0);
+    activateTarget();
     pendingResult = null;
     resetNavigation();
     handoffs.length = 0;
@@ -199,16 +200,21 @@ try {
       input.clear();
       testControls = null;
       run.home();
+      if (tour) {
+        tour.startPlan(offeredPlan());
+        tour.home();
+      }
       syncTourCheckpoint();
       vehicle.reset();
       world.resetDelivery();
-      world.setActiveDestination(0);
+      activateTarget();
       pendingResult = null;
       resetNavigation();
       handoffs.length = 0;
       recentDriveEvents.length = 0;
       resultDelay = 0;
       ui.resetJourney();
+      ui.setDestinations(run.destinations);
       sound.setPaused(true);
       ui.setMode('home');
     } else if (action === 'reload') location.reload();
@@ -272,10 +278,8 @@ try {
   function updateRouteContext(): number | null {
     if (!run.target) return null;
     const grounded = presentationGrounded();
-    if (tourLayout) {
-      const navigation = tourLayout.navigation(run.index, vehicle.normal, tourRoute, grounded, {
-        forward: vehicle.forward,
-      });
+    if (tour) {
+      const navigation = tour.navigation(vehicle.normal, tourRoute, grounded, vehicle.forward);
       tourRoute = navigation.route;
       tourNavigationPhase = navigation.phase;
       return surfaceDistance(vehicle.normal, navigation.target) > 1e-6
@@ -402,18 +406,22 @@ try {
         );
         if (delivery) {
           resetNavigation();
-          world.celebrate(world.destinations[delivery.index].normal);
-          world.setActiveDestination(run.index);
+          const destination = run.destinations[delivery.index];
+          world.celebrate(destination.normal);
+          activateTarget();
           sound.chime(delivery.finished);
           if (tour) {
             // A handoff changes only journey/cargo/reaction state, never the driving state.
             vehicle.syncVisual(0, elapsed);
             const origin = vehicle.consumeParcel();
             if (origin) {
-              world.startDelivery(origin, delivery.index);
+              const locationId = tour.plan.order[delivery.index];
+              world.startLocationDelivery(origin, locationId);
               if (import.meta.env.DEV)
                 handoffs.push({
                   index: delivery.index,
+                  occurrenceId: tour.occurrenceId(delivery.index),
+                  locationId,
                   origin: origin.toArray(),
                   normal: vehicle.normal.toArray(),
                   forward: vehicle.forward.toArray(),
@@ -425,12 +433,9 @@ try {
             syncTourCheckpoint();
             updateHUD();
             if (delivery.finished)
-              ui.showTourResults(tour.elapsed, tour.splits, saveBest(tour.elapsed, TOUR_RECORD_KEY));
-            else
-              ui.toast(
-                `Delivered to ${world.destinations[delivery.index].name}! Follow the connecting road to ${run.target!.name}.`,
-              );
-          } else if (prototype && delivery.finished) {
+              ui.showTourResults(tour.elapsed, tour.splits, saveBest(tour.elapsed, tour.recordKey), tour.recordKey);
+            else ui.toast(`Delivered to ${destination.name}! Follow the connecting road to ${run.target!.name}.`);
+          } else if (prototype && prototype.id !== 'tour' && delivery.finished) {
             vehicle.syncVisual(0, elapsed);
             const parcelStart = vehicle.getParcelWorldPosition();
             vehicle.setCargoVisible(false);
@@ -442,7 +447,7 @@ try {
             input.clear();
             testControls = null;
             ui.showResults(run.elapsed, saveBest(run.elapsed));
-          } else ui.toast(`Delivered to ${world.destinations[delivery.index].name}! Next stop: ${run.target!.name}.`);
+          } else ui.toast(`Delivered to ${destination.name}! Next stop: ${run.target!.name}.`);
         }
         accumulator -= step;
         if (run.mode !== 'playing') {

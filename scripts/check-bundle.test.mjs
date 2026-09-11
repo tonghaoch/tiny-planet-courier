@@ -22,8 +22,8 @@ function fixture(t, files = { 'assets/app.js': 'console.log(1);' }, manifest) {
 
 const generous = { chunkRawExclusive: 1000000, totalRaw: 2000000, totalGzip: 2000000 };
 
-test('hard production budgets stay fixed', () => {
-  assert.deepEqual(BUNDLE_BUDGETS, { chunkRawExclusive: 500000, totalRaw: 697994, totalGzip: 183361 });
+test('approved five-location feature budgets stay fixed without relaxing the chunk limit', () => {
+  assert.deepEqual(BUNDLE_BUDGETS, { chunkRawExclusive: 500000, totalRaw: 715000, totalGzip: 190000 });
 });
 
 test('individual raw limit is exclusive', t => {
@@ -39,7 +39,7 @@ test('individual raw limit is exclusive', t => {
 });
 
 test('aggregate raw limit is inclusive and counts small public JS too', t => {
-  for (const size of [697993, 697994, 697995]) {
+  for (const size of [714999, 715000, 715001]) {
     const directory = fixture(t, { 'assets/app.js': 'a'.repeat(350000), 'public/extra.js': 'b'.repeat(size - 350000) });
     const report = auditBundle(directory);
     assert.equal(report.files.length, 2);
@@ -49,7 +49,7 @@ test('aggregate raw limit is inclusive and counts small public JS too', t => {
     );
     assert.equal(
       report.errors.some(error => error.includes('Total raw budget')),
-      size > 697994,
+      size > 715000,
     );
   }
 });

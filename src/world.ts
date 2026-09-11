@@ -17,7 +17,10 @@ import { StationDeliveryReaction } from './station-reaction';
 import { GardenLevel } from './garden-level';
 import { GardenDeliveryReaction } from './garden-reaction';
 import type { BayEnvironment, SurfacePose } from './bay-types';
-import { TourLayout } from './tour-layout';
+import { TourLayout, type TourStopId } from './tour-layout';
+import { BeaconLevel, DepotLevel } from './tour-outposts';
+import type { OutpostDeliveryReaction } from './outpost-reaction';
+import { buildOutpostScene } from './world/outpost-scene';
 import { createTourConnectorGeometry } from './tour-world-geometry';
 import { PALETTE, material, align, mesh } from './world/scenery-primitives';
 import { localeFrame, localePrefix } from './world/locale-geometry';
@@ -76,6 +79,8 @@ export class PlanetWorld {
   readonly bayLevel: BayLevel | null;
   readonly stationLevel: StationLevel | null;
   readonly gardenLevel: GardenLevel | null;
+  readonly beaconLevel: BeaconLevel | null;
+  readonly depotLevel: DepotLevel | null;
   readonly tourLayout: TourLayout | null;
   /** A single-locale alias only; Tour has no privileged district. */
   readonly authoredLevel: AuthoredLevel | null;
@@ -124,6 +129,8 @@ export class PlanetWorld {
   private bakeryReaction: BayDeliveryReaction | null = null;
   private stationReaction: StationDeliveryReaction | null = null;
   private gardenReaction: GardenDeliveryReaction | null = null;
+  private beaconReaction: OutpostDeliveryReaction | null = null;
+  private depotReaction: OutpostDeliveryReaction | null = null;
 
   constructor(
     prototype: boolean | 'bay' | 'station' | 'garden' | 'tour' = false,
@@ -134,6 +141,8 @@ export class PlanetWorld {
       this.tourLayout?.stops[0].level ?? (prototype === true || prototype === 'bay' ? new BayLevel() : null);
     this.stationLevel = this.tourLayout?.stops[1].level ?? (prototype === 'station' ? new StationLevel() : null);
     this.gardenLevel = this.tourLayout?.stops[2].level ?? (prototype === 'garden' ? new GardenLevel() : null);
+    this.beaconLevel = this.tourLayout?.stops[3].level ?? null;
+    this.depotLevel = this.tourLayout?.stops[4].level ?? null;
     this.authoredLevel = this.tourLayout ? null : (this.bayLevel ?? this.stationLevel ?? this.gardenLevel);
     const level = this.authoredLevel;
     this.drivingEnvironment = this.tourLayout
@@ -170,6 +179,16 @@ export class PlanetWorld {
       this.gardenReaction = garden.reaction;
       this.dynamicSceneryRoots.push(...garden.dynamicRoots);
       this.turbines.push(garden.rotor);
+    }
+    if (this.beaconLevel) {
+      const beacon = buildOutpostScene(this.beaconLevel, scenery);
+      this.beaconReaction = beacon.reaction;
+      this.dynamicSceneryRoots.push(...beacon.dynamicRoots);
+    }
+    if (this.depotLevel) {
+      const depot = buildOutpostScene(this.depotLevel, scenery);
+      this.depotReaction = depot.reaction;
+      this.dynamicSceneryRoots.push(...depot.dynamicRoots);
     }
     this.buildNature();
     this.buildClouds();
@@ -681,6 +700,26 @@ export class PlanetWorld {
     this.root.add(atmosphere);
   }
 
+  /** Tour-only physical location APIs; standalone worlds retain numeric index zero. */
+  private locationIndex(id: TourStopId): number {
+    if (!this.tourLayout) throw new Error('Location APIs require a Tour world');
+    return this.tourLayout.stops.indexOf(this.tourLayout.location(id));
+  }
+
+  setActiveLocation(id: TourStopId | null): void {
+    if (!this.tourLayout) throw new Error('Location APIs require a Tour world');
+    this.setActiveDestination(id === null ? -1 : this.locationIndex(id));
+  }
+
+  startLocationDelivery(origin: THREE.Vector3, id: TourStopId): void {
+    this.startDelivery(origin, this.locationIndex(id));
+  }
+
+  getLocationReactionSnapshot(id: TourStopId): DeliveryReactionSnapshot {
+    return this.getDeliveryReactionSnapshot(this.locationIndex(id));
+  }
+
+  /** Physical destination index, never a ten-delivery occurrence index. */
   setActiveDestination(index: number) {
     this.activeIndex = index;
     this.targetGroups.forEach((target, i) => (target.visible = i === index));
@@ -700,9 +739,12 @@ export class PlanetWorld {
     }
   }
 
+  /** Physical destination index, never a ten-delivery occurrence index. */
   startDelivery(parcelStart: THREE.Vector3, index = 0): void {
     const level = this.destinationLevel(index);
-    if (level instanceof GardenLevel) this.gardenReaction?.start(parcelStart);
+    if (level instanceof BeaconLevel) this.beaconReaction?.start(parcelStart);
+    else if (level instanceof DepotLevel) this.depotReaction?.start(parcelStart);
+    else if (level instanceof GardenLevel) this.gardenReaction?.start(parcelStart);
     else if (level instanceof StationLevel) this.stationReaction?.start(parcelStart);
     else if (level instanceof BayLevel) this.startBayDelivery(parcelStart);
   }
@@ -711,10 +753,15 @@ export class PlanetWorld {
     this.resetBayDelivery();
     this.stationReaction?.reset();
     this.gardenReaction?.reset();
+    this.beaconReaction?.reset();
+    this.depotReaction?.reset();
   }
 
+  /** Physical destination index, never a ten-delivery occurrence index. */
   getDeliveryReactionSnapshot(index = 0): DeliveryReactionSnapshot {
     const level = this.destinationLevel(index);
+    if (level instanceof BeaconLevel) return this.beaconReaction!.snapshot();
+    if (level instanceof DepotLevel) return this.depotReaction!.snapshot();
     if (level instanceof GardenLevel) return this.gardenReaction!.snapshot();
     if (level instanceof StationLevel) return this.stationReaction!.snapshot();
     if (level instanceof BayLevel || (!this.tourLayout && index === 0)) return this.getBayReactionSnapshot();
@@ -798,6 +845,8 @@ export class PlanetWorld {
       this.bakeryReaction?.update(dt);
       this.stationReaction?.update(dt);
       this.gardenReaction?.update(dt);
+      this.beaconReaction?.update(dt);
+      this.depotReaction?.update(dt);
     }
     for (const p of this.splashParticles) {
       if (p.life <= 0) continue;

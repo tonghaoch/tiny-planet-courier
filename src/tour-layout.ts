@@ -1,15 +1,22 @@
-import { CubicBezierCurve3, Vector3 } from 'three';
+import { CatmullRomCurve3, CubicBezierCurve3, Vector3 } from 'three';
 import { point, segmentDistance } from './authored-level';
 import { BayLevel, type BayRoute } from './bay-level';
 import { routeAhead, type NavigationContext, type RouteCursor } from './route-guidance';
 import { StationLevel } from './station-level';
 import { GardenLevel } from './garden-level';
 import { RoadLevel, type RoadRoute } from './road-level';
-import { PLANET_RADIUS, surfaceDistance, tangent, type Collider, type Destination } from './math';
+import { PLANET_RADIUS, spherical, surfaceDistance, tangent, type Collider, type Destination } from './math';
+import { BeaconLevel, DepotLevel } from './tour-outposts';
+import type { TourLocationId, TourPlan } from './tour-itinerary';
 import type { BayEnvironment, BaySurface, RampCrossing, SurfacePose } from './bay-types';
 
-export type TourStopId = 'bay' | 'station' | 'garden';
-export type TourStop = Stop<'bay', BayLevel> | Stop<'station', StationLevel> | Stop<'garden', GardenLevel>;
+export type TourStopId = TourLocationId;
+export type TourStop =
+  | Stop<'bay', BayLevel>
+  | Stop<'station', StationLevel>
+  | Stop<'garden', GardenLevel>
+  | Stop<'beacon', BeaconLevel>
+  | Stop<'depot', DepotLevel>;
 interface Stop<Id extends TourStopId, Level> {
   readonly id: Id;
   readonly level: Level;
@@ -27,6 +34,7 @@ export interface TourConnector {
 }
 export interface TourRouteCache {
   readonly index: number;
+  readonly legKey?: string;
   readonly route: RoadRoute | null;
   readonly bayRoute?: BayRoute | null;
   readonly phase?: 'transfer' | 'local';
@@ -88,13 +96,21 @@ function pathDistance(normal: Vector3, path: readonly Vector3[]): number {
   return Math.acos(Math.min(1, Math.max(-1, bestDot))) * PLANET_RADIUS;
 }
 
-/** One planet, three unchanged local courses, and visible, supported transfer roads. */
+/** Five physical courses, with an explicit directed transfer graph. */
 export class TourLayout {
-  readonly stops: readonly [Stop<'bay', BayLevel>, Stop<'station', StationLevel>, Stop<'garden', GardenLevel>];
+  readonly stops: readonly [
+    Stop<'bay', BayLevel>,
+    Stop<'station', StationLevel>,
+    Stop<'garden', GardenLevel>,
+    Stop<'beacon', BeaconLevel>,
+    Stop<'depot', DepotLevel>,
+  ];
   readonly destinations: Destination[];
   readonly spawnPose: SurfacePose;
   readonly connectors: readonly TourConnector[];
-  private readonly navigationPaths: readonly { wide: Vector3[]; short: Vector3[] }[];
+  private readonly paths = new Map<string, Vector3[]>();
+  private readonly graphPaths = new Map<string, readonly TourConnector[]>();
+  private readonly planPaths = new WeakMap<TourPlan, Map<string, Vector3[]>>();
 
   constructor() {
     const bay = new BayLevel({ latitude: 20, longitude: 0 });
@@ -114,13 +130,19 @@ export class TourLayout {
         deliveredPose: { normal, forward: tangent(level.toNormal(pad.x + 0.01, pad.y), normal) },
       };
     };
-    this.stops = [stop('bay', bay), stop('station', station), stop('garden', garden)];
+    this.stops = [
+      stop('bay', bay),
+      stop('station', station),
+      stop('garden', garden),
+      stop('beacon', new BeaconLevel()),
+      stop('depot', new DepotLevel()),
+    ];
     this.destinations = this.stops.map(s => ({ ...s.destination, normal: s.destination.normal.clone() }));
     this.spawnPose = clonePose(this.stops[0].entryPose);
     const exits = [13.5, 5, 5.5];
     const entries = [-12.5, -14.5, -16.5];
-    this.connectors = this.stops.map((from, index) => {
-      const toIndex = (index + 1) % this.stops.length;
+    const northern = this.stops.slice(0, 3).map((from, index) => {
+      const toIndex = (index + 1) % 3;
       const to = this.stops[toIndex];
       const exit = from.level.toNormal(exits[index], 0);
       const entry = to.level.toNormal(entries[toIndex], 0);
@@ -144,12 +166,35 @@ export class TourLayout {
         path: samplePath([...outgoing, ...exterior.slice(1), ...incoming.slice(1)]),
       };
     });
-    // Share the incoming road across both guidance phases. The footprint is an
-    // ownership boundary, not a place to jump 1.8 units past the locale's spawn.
-    this.navigationPaths = this.stops.map((_, index) => ({
-      wide: this.routeForLeg(index, 'wide'),
-      short: this.routeForLeg(index, 'short'),
-    }));
+    const southern = (from: number, to: number, waypoints: Vector3[]): TourConnector => {
+      const origin = this.stops[from].level;
+      const destination = this.stops[to].level;
+      const exitX = from === 1 ? 5 : 6.5;
+      const entryX = to === 1 ? -14.5 : -6.5;
+      const exit = origin.toNormal(exitX, 0);
+      const entry = destination.toNormal(entryX, 0);
+      const departure = origin.toNormal(exitX + 2, 0);
+      const arrival = destination.toNormal(entryX - 2, 0);
+      const exterior = new CatmullRomCurve3([exit, departure, ...waypoints, arrival, entry], false, 'centripetal')
+        .getPoints(320)
+        .map(n => n.normalize());
+      return {
+        from,
+        to,
+        width: 1.8,
+        path: samplePath([
+          ...origin.route([origin.definition.pad.center, point(exitX, 0)]),
+          ...exterior.slice(1),
+          ...destination.route([point(entryX, 0), destination.definition.spawn.position]).slice(1),
+        ]),
+      };
+    };
+    this.connectors = [
+      ...northern,
+      southern(1, 4, [spherical(-15, 155), spherical(-30, 170)]),
+      southern(4, 3, [spherical(-42, -70)]),
+      southern(3, 1, [spherical(-32, 52), spherical(-17, 58)]),
+    ];
   }
 
   /** Never consult a locale's default-ground fallback until it owns this footprint. */
@@ -183,21 +228,92 @@ export class TourLayout {
     );
   }
 
-  /** Leg zero starts at Bay spawn; other legs include the preceding pad and transfer. */
-  routeForLeg(index: number, variant: 'wide' | 'short'): Vector3[] {
-    const stop = this.stops[index];
-    if (!stop || !Number.isInteger(index)) throw new RangeError('Tour leg index must be 0, 1, or 2');
-    const level = stop.level;
-    const local =
-      level instanceof BayLevel
-        ? variant === 'wide'
-          ? level.safeRoute
-          : level.jumpRoute
-        : variant === 'wide'
-          ? level.outerRoute
-          : level.innerRoute;
-    const path = index === 0 ? local : [...this.connectors[index - 1].path, ...local.slice(1)];
-    return path.map(p => p.clone());
+  location(id: TourStopId): TourStop {
+    const stop = this.stops.find(stop => stop.id === id);
+    if (!stop) throw new RangeError('Unknown Tour location');
+    return stop;
+  }
+
+  private localPath(id: TourStopId, variant: 'wide' | 'short'): Vector3[] {
+    const level = this.location(id).level;
+    return level instanceof BayLevel
+      ? variant === 'wide'
+        ? level.safeRoute
+        : level.jumpRoute
+      : variant === 'wide'
+        ? level.outerRoute
+        : level.innerRoute;
+  }
+
+  private transitPath(id: TourStopId): Vector3[] {
+    return this.localPath(id, id === 'bay' ? 'wide' : 'short');
+  }
+
+  /** Shortest directed graph path by actual road length, including safe local transit. */
+  connectorsBetween(from: TourStopId, to: TourStopId): readonly TourConnector[] {
+    const key = `${from}>${to}`;
+    const cached = this.graphPaths.get(key);
+    if (cached) return cached;
+    const start = this.stops.indexOf(this.location(from));
+    const end = this.stops.indexOf(this.location(to));
+    const queue = [{ at: start, cost: 0, edges: [] as TourConnector[] }];
+    const visited = new Set<number>();
+    while (queue.length) {
+      queue.sort((a, b) => a.cost - b.cost);
+      const current = queue.shift()!;
+      if (current.at === end) {
+        const edges = Object.freeze(current.edges);
+        this.graphPaths.set(key, edges);
+        return edges;
+      }
+      if (visited.has(current.at)) continue;
+      visited.add(current.at);
+      for (const edge of this.connectors.filter(edge => edge.from === current.at)) {
+        const path = [...edge.path, ...this.transitPath(this.stops[edge.to].id)];
+        const length = path.reduce((sum, n, i) => sum + (i ? surfaceDistance(path[i - 1], n) : 0), 0);
+        queue.push({ at: edge.to, cost: current.cost + length, edges: [...current.edges, edge] });
+      }
+    }
+    throw new RangeError('Unreachable Tour location');
+  }
+
+  /** Stable shared path. Bay transit always uses the coast, never a reversed leap. */
+  routeBetween(from: TourStopId | 'spawn', to: TourStopId, variant: 'wide' | 'short'): Vector3[] {
+    if (from === to) throw new RangeError('A delivery leg must change locations');
+    const key = `${from}>${to}:${variant}`;
+    const cached = this.paths.get(key);
+    if (cached) return cached;
+    const path: Vector3[] = [];
+    const append = (part: Vector3[]) => path.push(...(path.length ? part.slice(1) : part).map(n => n.clone()));
+    if (from === 'spawn' && to !== 'bay') append(this.localPath('bay', 'wide'));
+    const edges = this.connectorsBetween(from === 'spawn' ? 'bay' : from, to);
+    for (let i = 0; i < edges.length; i++) {
+      append(edges[i].path);
+      if (i < edges.length - 1) append(this.transitPath(this.stops[edges[i].to].id));
+    }
+    append(this.localPath(to, variant));
+    this.paths.set(key, path);
+    return path;
+  }
+
+  /** Pass a plan for occurrence indices. Omission retains the old three-leg inspection API. */
+  routeForLeg(index: number, variant: 'wide' | 'short', plan?: TourPlan): Vector3[] {
+    const order = plan?.order ?? (['bay', 'station', 'garden'] as const);
+    if (!Number.isInteger(index) || !order[index]) throw new RangeError('Invalid Tour leg index');
+    if (!plan)
+      return this.routeBetween(index === 0 ? 'spawn' : order[index - 1], order[index], variant).map(n => n.clone());
+    let paths = this.planPaths.get(plan);
+    if (!paths) {
+      paths = new Map();
+      this.planPaths.set(plan, paths);
+    }
+    const key = `${index}:${variant}`;
+    if (!paths.has(key))
+      paths.set(
+        key,
+        this.routeBetween(index === 0 ? 'spawn' : order[index - 1], order[index], variant).map(n => n.clone()),
+      );
+    return paths.get(key)!;
   }
 
   /** Leg-keyed explicit state. Region hysteresis is navigation-only; it never
@@ -208,16 +324,21 @@ export class TourLayout {
     previousRoute: TourRouteCache | null,
     grounded: boolean,
     context: Pick<NavigationContext, 'forward'> = {},
+    plan?: TourPlan,
   ): TourNavigation {
-    if (!Number.isInteger(index) || index < 0 || index > this.stops.length)
+    const order = plan?.order ?? (['bay', 'station', 'garden'] as const);
+    if (!Number.isInteger(index) || index < 0 || index > order.length)
       throw new RangeError('Invalid Tour navigation index');
-    const stop = this.stops[index] ?? this.stops[0];
+    const stop = this.location(order[index] ?? (plan ? order[order.length - 1] : 'bay'));
+    const legKey = `${plan ? `${plan.version}:${plan.seed}:${order.join('.')}` : 'legacy'}:${index}`;
     const previous =
-      previousRoute?.index === index && (!previousRoute.normal || surfaceDistance(normal, previousRoute.normal) < 3)
+      previousRoute?.index === index &&
+      (!previousRoute.legKey || previousRoute.legKey === legKey) &&
+      (!previousRoute.normal || surfaceDistance(normal, previousRoute.normal) < 3)
         ? previousRoute
         : null;
-    let local = index < this.stops.length && (index === 0 || stop.level.isInFootprint(normal));
-    if (index > 0 && index < this.stops.length && previous?.phase) {
+    let local = index < order.length && stop.level.isInFootprint(normal);
+    if (index < order.length && previous?.phase) {
       const p = stop.level.toLocal(normal),
         polygon = stop.level.definition.footprintPolygon;
       const boundary = Math.min(...polygon.map((a, i) => segmentDistance(p, a, polygon[(i + 1) % polygon.length])));
@@ -226,6 +347,7 @@ export class TourLayout {
     const phase = local ? 'local' : 'transfer';
     const cache: TourRouteCache = {
       index,
+      legKey,
       route: local ? (previous?.route ?? null) : null,
       bayRoute: local ? (previous?.bayRoute ?? null) : null,
       phase,
@@ -252,12 +374,24 @@ export class TourLayout {
         localCursor = navigation.cursor;
       }
     }
-    if (index === 0)
+    if (index === order.length && plan) return { target: stop.destination.normal.clone(), route: cache, phase };
+    if (index === 0 && stop.id === 'bay' && local)
       return { target: target!, route: { ...cache, route, bayRoute, cursor: localCursor, localCursor }, phase };
+    const variant = !local
+      ? 'wide'
+      : stop.level instanceof BayLevel
+        ? bayRoute === 'coast'
+          ? 'wide'
+          : 'short'
+        : route === 'outer'
+          ? 'wide'
+          : 'short';
     const path =
-      index === this.stops.length
+      index === order.length
         ? this.connectors[2].path
-        : this.navigationPaths[index][route === 'outer' ? 'wide' : 'short'];
+        : plan
+          ? this.routeForLeg(index, variant, plan)
+          : this.routeBetween(index === 0 ? 'spawn' : order[index - 1], stop.id, variant);
     const ahead = routeAhead(normal, path, previous?.cursor ?? null);
     return { target: ahead.target, route: { ...cache, route, bayRoute, cursor: ahead.cursor, localCursor }, phase };
   }

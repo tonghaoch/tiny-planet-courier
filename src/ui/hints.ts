@@ -28,7 +28,8 @@ export interface MissionHintState {
 }
 
 function currentLocale(prototype: PrototypeDefinition | null, driveState?: BayHUDState) {
-  return prototype?.id === 'tour' && driveState?.stopId ? PROTOTYPES[driveState.stopId] : prototype;
+  const id = prototype?.id === 'tour' ? driveState?.stopId : undefined;
+  return id === 'bay' || id === 'station' || id === 'garden' ? PROTOTYPES[id] : prototype;
 }
 
 export function missionHint({
@@ -49,6 +50,15 @@ export function missionHint({
     hint = driveState.reverseToExit
       ? 'Next road is behind you. Reverse and turn gently.'
       : `Follow the connecting road to ${targetName}.`;
+  } else if (prototype?.id === 'tour' && (driveState?.stopId === 'beacon' || driveState?.stopId === 'depot')) {
+    if (distance >= DELIVERY_RADIUS)
+      hint = driveState.nearDestination
+        ? `${targetName} ahead. Brake before the glow.`
+        : driveState.route === 'outer'
+          ? prototype.hints.outer
+          : driveState.route === 'inner'
+            ? prototype.hints.inner
+            : prototype.hints.choice;
   } else if (localPrototype?.id === 'station' || localPrototype?.id === 'garden') {
     if (driveState?.phase === 'recovering') hint = localPrototype.hints.recovery;
     else if (distance >= DELIVERY_RADIUS) {

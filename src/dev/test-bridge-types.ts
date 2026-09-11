@@ -4,6 +4,7 @@ import type { PrototypeId } from '../delivery-prototypes';
 import type { DeliveryRun } from '../game';
 import type { GuidanceMode } from '../navigation-presentation';
 import type { RoadRoute } from '../road-level';
+import type { TourPlan } from '../tour-itinerary';
 import type { TourStopId } from '../tour-layout';
 import type { TourSplit } from '../tour-session';
 import type { Controls } from '../vehicle';
@@ -52,16 +53,32 @@ export interface PlanetTestGuidance extends PlanetTestPose {
 }
 export interface PlanetTestHandoff extends PlanetTestPose {
   index: number;
+  occurrenceId: string;
+  locationId: TourStopId;
   origin: PlanetTestVector;
   speed: number;
   charge: number;
   remaining: number;
 }
+export interface PlanetTestLocation {
+  index: number;
+  id: TourStopId;
+  name: string;
+  parcel: string;
+  destination: PlanetTestVector;
+  entry: PlanetTestPose;
+  pad: PlanetTestPose;
+}
 export interface PlanetTestTourSnapshot {
+  plan: TourPlan;
+  recordKey: string;
+  catalog: PlanetTestLocation[];
+  currentLocationId: TourStopId | null;
+  completedLocationId: TourStopId | null;
   splits: readonly TourSplit[];
   entryVisited: readonly boolean[];
   currentStop: TourStopId | null;
-  checkpoint: { stopId: TourStopId; kind: 'entry' | 'pad'; label: string; pose: PlanetTestPose };
+  checkpoint: { legIndex: number; stopId: TourStopId; kind: 'entry' | 'pad'; label: string; pose: PlanetTestPose };
   recoveryPose: PlanetTestPose;
   navigationPhase: 'transfer' | 'local';
   routeCache: PlanetTestRouteCache | null;
@@ -122,6 +139,7 @@ export interface PlanetTestRoadRoutes {
 }
 export interface PlanetTestTourLeg {
   index: number;
+  occurrenceId: string;
   stopId: TourStopId;
   destination: PlanetTestVector;
   entry: PlanetTestPose;
@@ -130,8 +148,12 @@ export interface PlanetTestTourLeg {
   short: PlanetTestVector[];
 }
 export interface PlanetTestTourRoutes {
+  plan: TourPlan;
+  recordKey: string;
+  catalog: PlanetTestLocation[];
   legs: PlanetTestTourLeg[];
   connectors: { from: number; to: number; width: number; path: PlanetTestVector[] }[];
+  /** Legacy Garden -> Bay free-roam road, not the randomized final leg's return path. */
   closing: PlanetTestVector[];
   spawn: PlanetTestVector;
 }
@@ -151,7 +173,9 @@ export interface PlanetTestBridge {
   setControls(controls: PlanetTestControls | null): void;
   setNavigationFixture(pose: PlanetTestNavigationFixture): void;
   dockAtTarget(): void;
+  /** Physical catalog index, never an itinerary occurrence. */
   dockAtStop(index: number): void;
+  dockAtLocation(id: TourStopId): void;
 }
 
 declare global {

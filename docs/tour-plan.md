@@ -1,6 +1,44 @@
-# Three-stop Tour — official release and historical development plan
+# Tour plan — five-location release and three-stop history
 
-## Scope and release boundary
+## Current five-location, ten-delivery contract
+
+**2026-09-11: five-location release authorized.** After accepting the preview visuals, the owner explicitly requested: “很好，帮我发布到main，记得更新README和截图” (“Great, publish it to main, and remember to update README and screenshots”). This authorizes main publication and the documentation/image refresh; it does not claim a personal full ten-delivery playthrough. Validation was recorded on `feat/five-location-tour` from released engineering baseline `d5a7985`, before committing. The primary owns the feature-branch commit, main fast-forward/push, exact-SHA Actions/Pages verification and independent public-site smoke. Authorization is not a claim that deployment has succeeded; no additional approval gate is required. Historical permissions below retain their original release boundaries.
+
+### World and routes
+
+Five physical sites coexist on one radius-15 planet. Sunrise Bakery, Stargaze Station and Windmill Garden retain their accepted local definitions, Tour anchors and driving tuning. New southern **Beacon Post** receives a replacement lamp; **Redrock Depot** receives repair supplies. Existing route identities remain: Bay approach/leap/landing, Station braking and line choice, Garden linked turns.
+
+The authored directed graph keeps **Bay → Station → Garden → Bay** and adds **Station → Depot → Beacon → Station**. It supports routing between all sites; it is **not an imposed traffic rule**. Free driving remains. Transit uses safe ground routes (Bay coast, other inner paths), never a reverse Bay leap. The compass still points directly to the active destination; roads supply context, not a safe-road steering arrow. Expansion occupies new southern space without increasing global radius; [architecture measurements](architecture.md#measured-physical-extent-and-world-root-cost) distinguish summed centerlines from paved area.
+
+### Immutable offer and repeat visits
+
+- Ten occurrences comprise **two shuffled bags of all five locations**: exactly two visits per site, no destination matching either of the prior two, and no repeated directed delivery pair in the nine transitions.
+- Bounded enumeration finds **20 valid second bags per first permutation**. Home/new Tour offers a fresh random draw, not a guaranteed globally unique itinerary. Start/Restart retries the exact offered plan.
+- `tourSeed` is a **DEV + test-only** override, e.g. `/?test=1&tourSeed=227`. Production ignores all prototype/test/seed overrides and exposes no bridge.
+- Location ID, occurrence index and legacy `destination.id` are distinct. `TourLayout` catalogs five sites; `TourSession.destinations` represents ten occurrences. Session plan/location IDs, occurrence-bearing splits and typed World location wrappers preserve that boundary.
+- Ten compact roof parcels are consumed one at a time from their exact handoff origins. Repeat visits reset/replay only that site's reaction; delivery never swaps the scene or resets the van.
+- Each leg resets entrance-checkpoint earning. Only actual grounded arrivals/transit earn recovery; previous visits do not allow skipping a transfer. Recovery keeps cargo, splits and active time intact.
+- Ten completions freeze scoring, not driving. Transfers count toward the next split and pauses are excluded. Native results details start collapsed, with bounded scroll and compact portrait/short-landscape forms preserving van, recipient, controls, 12px result text and 44px targets. Restart clears journey state/reactions while retaining the plan.
+
+Best times are scoped to **layout/scoring/start/ordered itinerary**, not seed or a global three-stop record:
+`tiny-planet-courier:tour:best:five-location-v2:score-v2:bay-entry:<ordered IDs>`.
+Old keys remain untouched. Prototype Tour `bestScoreKey` is `null`; results receive the real session key.
+
+### Current implementation and evidence boundary
+
+Existing entry points remain, with `tour-itinerary.ts`, `tour-outposts.ts`, `outpost-reaction.ts` and `world/outpost-scene.ts`; no new runtime dependencies. The shared page-RAF controller in `tests/helpers/tour-browser-driver.ts` is **test-only**, not a runtime autopilot or physics change. Follow [AGENTS.md](../AGENTS.md) and the [domain/architecture contracts](architecture.md).
+
+**Primary-supplied final evidence, not documentation-worker runs:** full `verify` passed (487 Vitest tests in 35 files, 11 Node audit tests, static checks/build/audits); **104 distinct DEV cases passed across sequential fresh-process groups on one unchanged candidate**, not one successful 104/104 invocation; then **24/24 production cases passed**. SHA256 confirmed 123 source/config/build files unchanged across accepted observations. Real controller checks cover all 20 ordered site pairs, all five departures, old/new alternatives and complete ten-stop routes; browser wide seed 9 and short seed 55 include the Garden→Bay closing road, and navigation seed 227 completes ten. Docking fixtures prove UI/state only.
+
+The [release checkpoint](iteration-plan.md#five-location-release-checkpoint--2026-09-11) contains exact groups, failure/repair history, the 4175 production-config exception, smoke evidence and limitations. Actual Safari/WebKit and hardware phones were not tested; remote CI/deployment were outside that local validation. README screenshots now show the five-location production build at **http://127.0.0.1:4173/tiny-planet-courier/**: a settled ten-parcel welcome and genuine early Bay driving toward the randomly offered Sunrise Bakery, not a view of all five sites or a complete Tour. [Capture provenance](iteration-plan.md#five-location-screenshot-provenance--2026-09-11) records the exact assets and checks. The primary separately confirms publication.
+
+---
+
+## Historical three-stop release — 2026-09-09
+
+**Everything below preserves the three-stop design/release history.** Its three-parcel counts, fixed order, global record, former DEV-only requirements and release authorization are historical, not the current five-location contract. Past accepted routes and verification are retained without reopening their old approval gates.
+
+### Historical scope and release boundary
 
 **2026-09-09: owner acceptance and release authorization are complete.** The owner has accepted the HUD and personally completed the connected **Sunrise Bakery → Stargaze Station → Windmill Garden** Tour with no blocking issues. They explicitly requested the main merge and README screenshot refresh, then selected **Tour as the official public default with automatic GitHub Pages deployment**. No repeat owner-playtest or promotion-approval gate remains.
 
@@ -10,7 +48,9 @@ Both bare development and production roots now select Tour. Production ignores *
 
 Follow [AGENTS.md](../AGENTS.md): the primary agent designs and independently verifies; GPT-6 / medium-effort subagents implement and repair code. This release does not retune the accepted HUD/style, navigation, route geometry, driving, camera, checkpoints, sessions, records or DEV bridge guards.
 
-## Current implementation and verification status
+<a id="current-implementation-and-verification-status"></a>
+
+## Historical three-stop implementation and verification status
 
 **Primary-supplied release evidence, not suites run by the documentation/capture worker:**
 
@@ -150,4 +190,4 @@ B/C may run in parallel with non-overlapping file ownership. Do not run full bro
 
 The primary agent reviews actual changes and runs unit tests, browser tests and production-preview checks **sequentially**, inspecting screenshots and runtime errors. If anything fails, provide a reproduction and constraints to a GPT-6 / medium-effort implementation subagent; do not bypass the collaboration policy by patching application code in the coordinator.
 
-The HUD and connected journey are owner-accepted, with no blocking issues reported after the owner's complete Tour. Main promotion, screenshot refresh and automatic Pages deployment are explicitly authorized. Preserve the accepted baseline; the primary verifies source/test integrity, actual publication and exact SHA separately. Do not reinterpret historical DEV-only requirements or pending acceptance language as current release gates.
+**At that historical three-stop checkpoint**, the HUD and connected journey were owner-accepted, with no blocking issues reported after the owner's complete Tour. Main promotion, screenshot refresh and automatic Pages deployment were explicitly authorized for that release only. Preserve the accepted baseline; the primary verifies source/test integrity, actual publication and exact SHA separately. Historical DEV-only requirements and pending acceptance language do not reopen old release gates. The five-location release has its own explicit 2026-09-11 authorization recorded at the top.

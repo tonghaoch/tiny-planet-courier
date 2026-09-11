@@ -15,6 +15,7 @@ import { GARDEN_LEVEL, GardenLevel } from './garden-level';
 import { STATION_LEVEL, StationLevel } from './station-level';
 import { PLANET_RADIUS as R, spherical, surfaceDistance } from './math';
 import { PlanetWorld } from './world';
+import { BEACON_LEVEL, DEPOT_LEVEL, BeaconLevel, DepotLevel } from './tour-outposts';
 import { createTourConnectorGeometry } from './tour-world-geometry';
 
 const objects = (root: Object3D) => {
@@ -50,7 +51,7 @@ const arcDistance = (n: Vector3, a: Vector3, b: Vector3) => {
 
 // Deliberately instantiate the real scene, not just TourLayout's obstacle metadata.
 // No jsdom/canvas/WebGL renderer is needed for geometry, transforms or reactions.
-describe('three-stop Tour world', () => {
+describe('five-location Tour world with the original three-stop baseline', () => {
   let world: PlanetWorld;
   let original: PlanetWorld;
   let constructionErrors: unknown[][];
@@ -70,7 +71,7 @@ describe('three-stop Tour world', () => {
     world.root.updateMatrixWorld(true);
   });
 
-  it('constructs all three reanchored districts around one base planet without canvas or batching errors', () => {
+  it('constructs all five districts around one base planet without canvas or batching errors', () => {
     expect(typeof document).toBe('undefined');
     expect(constructionErrors).toEqual([]);
     const layout = world.tourLayout!;
@@ -81,12 +82,18 @@ describe('three-stop Tour world', () => {
     expect(world.bayLevel).toBeInstanceOf(BayLevel);
     expect(world.stationLevel).toBeInstanceOf(StationLevel);
     expect(world.gardenLevel).toBeInstanceOf(GardenLevel);
+    expect(world.beaconLevel).toBeInstanceOf(BeaconLevel);
+    expect(world.depotLevel).toBeInstanceOf(DepotLevel);
+    expect(world.beaconLevel).toBe(layout.stops[3].level);
+    expect(world.depotLevel).toBe(layout.stops[4].level);
     expect(world.destinations).toEqual(layout.destinations);
-    expect(world.destinations.map(d => d.id)).toEqual(['bakery', 'observatory', 'windmill']);
+    expect(world.destinations.map(d => d.id)).toEqual(['bakery', 'observatory', 'windmill', 'beacon', 'depot']);
     expect(layout.stops.map(s => s.level.definition.anchor)).toEqual([
       { latitude: 20, longitude: 0 },
       { latitude: -8, longitude: 125 },
       { latitude: 28, longitude: -115 },
+      { latitude: -55, longitude: 0 },
+      { latitude: -50, longitude: -135 },
     ]);
     for (const name of [
       'base-planet',
@@ -95,6 +102,8 @@ describe('three-stop Tour world', () => {
       'bay-bakery',
       'station-observatory',
       'garden-windmill',
+      'beacon-lighthouse',
+      'depot-tool-shed',
     ]) {
       expect(objects(world.root).filter(o => o.name === name)).toHaveLength(1);
     }
@@ -112,8 +121,14 @@ describe('three-stop Tour world', () => {
   });
 
   it('places every marker and recipient in its own local frame with its own pad radius', () => {
-    const buildings = [BAY_LEVEL.bakery, STATION_LEVEL.station, GARDEN_LEVEL.windmill];
-    const names = ['bay-bakery', 'station-observatory', 'garden-windmill'];
+    const buildings = [
+      BAY_LEVEL.bakery,
+      STATION_LEVEL.station,
+      GARDEN_LEVEL.windmill,
+      BEACON_LEVEL.landmark,
+      DEPOT_LEVEL.landmark,
+    ];
+    const names = ['bay-bakery', 'station-observatory', 'garden-windmill', 'beacon-lighthouse', 'depot-tool-shed'];
     world.tourLayout!.stops.forEach((stop, index) => {
       const target = world.root.getObjectByName(`${stop.id}-delivery-target`)!;
       expect(target.position.clone().normalize().distanceTo(stop.destination.normal)).toBeLessThan(1e-12);
@@ -195,7 +210,7 @@ describe('three-stop Tour world', () => {
     }
     expect(world.getDeliveryReactionSnapshot()).toEqual(world.getBayReactionSnapshot());
     const initial = completed.map(s => ({ ...s }));
-    for (const invalid of [-1, 3, 0.5, NaN, Infinity]) {
+    for (const invalid of [-1, 5, 9, 0.5, NaN, Infinity]) {
       world.startDelivery(new Vector3(1, 0, 0), invalid);
       expect(world.getDeliveryReactionSnapshot(invalid)).toEqual({
         active: false,
@@ -294,7 +309,67 @@ describe('three-stop Tour world', () => {
           const contact = hit([road], n);
           expect(contact, `${connector.from}->${connector.to} sample ${i}, width ${width}`).toBeDefined();
           expect(layout.sampleSurface(n).kind).toBe('road');
+          for (const [index, stop] of layout.stops.entries()) {
+            if (index !== connector.from && index !== connector.to) expect(stop.level.isInFootprint(n)).toBe(false);
+          }
           expect(Math.abs(contact.point.length() - layout.sampleSurface(n).radius)).toBeLessThan(0.002);
+        }
+      }
+    }
+  });
+
+  it('renders actual connector round joins/endcaps and both new local overlays at contact height', () => {
+    const layout = world.tourLayout!;
+    for (const connector of layout.connectors) {
+      const road = world.root.getObjectByName(`tour-connector-${connector.from}-${connector.to}`)!;
+      const probes = [connector.path[0], connector.path.at(-1)!, ...connector.path.filter((_, i) => i % 30 === 0)];
+      for (const normal of probes) {
+        const side = new Vector3(0, 1, 0).cross(normal).normalize();
+        for (let angle = 0; angle < Math.PI * 2; angle += Math.PI / 6) {
+          // Keep the original sharp-cap test's 0.89 probe: round boundaries are
+          // polygonal (0.12 arc slices), unlike the exact straight lane edges.
+          const edge = sidePoint(normal, side.clone().applyAxisAngle(normal, angle), 0.89);
+          const contact = hit([road], edge);
+          expect(contact, `cap/join ${connector.from}->${connector.to}`).toBeDefined();
+          expect(layout.sampleSurface(edge).kind).toBe('road');
+          expect(Math.abs(contact.point.length() - layout.sampleSurface(edge).radius)).toBeLessThan(0.002);
+        }
+      }
+    }
+    for (const stop of layout.stops.slice(3)) {
+      const surfaces = ['land', 'road'].map(name => world.root.getObjectByName(`${stop.id}-${name}`)!);
+      for (let x = -4.9; x < 5; x += 0.2)
+        for (let y = -2.9; y < 3; y += 0.2) {
+          const normal = stop.level.toNormal(x, y);
+          const contact = hit(surfaces, normal);
+          expect(contact).toBeDefined();
+          expect(Math.abs(contact.point.length() - stop.level.sampleSurface(normal).radius)).toBeLessThan(0.006);
+        }
+    }
+  });
+
+  it('keeps actual solid decorative extents above neither connector lanes nor pad departures', () => {
+    // Target icons are intentionally overhead. Mailboxes are static-batched into
+    // the root, so remain included with buildings, signs, rocks and tree crowns.
+    const targetMeshes = new Set(
+      world.tourLayout!.stops.flatMap(stop => meshes(world.root.getObjectByName(`${stop.id}-delivery-target`)!)),
+    );
+    const solids = meshes(world.root).filter(
+      m => !targetMeshes.has(m) && m.material instanceof MeshStandardMaterial && !m.material.transparent,
+    );
+    for (const connector of world.tourLayout!.connectors) {
+      for (let i = 1; i < connector.path.length; i += 3) {
+        const a = connector.path[i - 1],
+          b = connector.path[i];
+        const side = a.clone().cross(b).normalize();
+        for (const fraction of [-0.49, 0, 0.49]) {
+          const normal = sidePoint(a.clone().add(b).normalize(), side, connector.width * fraction);
+          const contact = hit(solids, normal);
+          expect(contact).toBeDefined();
+          expect(
+            contact.point.length(),
+            `decorative obstruction ${connector.from}->${connector.to} sample ${i} side ${fraction}`,
+          ).toBeLessThan(R + 0.13);
         }
       }
     }
@@ -348,7 +423,7 @@ describe('three-stop Tour world', () => {
       }
     // Legacy props must not enter any district. These are the real authored
     // colliders, not a separately generated metadata list used as the world.
-    const expectedCounts = [1, STATION_LEVEL.obstacles.length + 1, GARDEN_LEVEL.beds.length + 2];
+    const expectedCounts = [1, STATION_LEVEL.obstacles.length + 1, GARDEN_LEVEL.beds.length + 2, 1, 1];
     layout.stops.forEach((stop, index) =>
       expect(world.colliders.filter(c => stop.level.isInFootprint(c.normal))).toHaveLength(expectedCounts[index]),
     );

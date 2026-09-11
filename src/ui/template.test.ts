@@ -16,17 +16,33 @@ const variants = [
     prototype: PROTOTYPES.garden,
     hash: '2171dd342e3a989f6ff89eadddaa99ee137ad67f7f4a98ec0b966860a35ae092',
   },
-  {
-    name: 'tour',
-    prototype: PROTOTYPES.tour,
-    hash: '90e9a5694b3ccbffe8452795adae0ac5b0d30a5685d284c6f315bf4adb61592c',
-  },
+  { name: 'tour', prototype: PROTOTYPES.tour },
 ];
 
 describe('initial UI shell', () => {
-  // Captured from the original constructor before extraction, including every whitespace byte.
-  it.each(variants)('preserves the complete $name shell', ({ prototype, hash }) => {
-    expect(createHash('sha256').update(renderUIShell(prototype)).digest('hex')).toBe(hash);
+  // Solo/standard shells retain their original byte-for-byte baseline.
+  it.each(variants.filter(variant => variant.name !== 'tour'))(
+    'preserves the complete $name shell',
+    ({ prototype, hash }) => {
+      expect(createHash('sha256').update(renderUIShell(prototype)).digest('hex')).toBe(hash);
+    },
+  );
+
+  it('offers ten deliveries and a native collapsed, keyboard-focusable split disclosure', () => {
+    const shell = renderUIShell(PROTOTYPES.tour);
+    expect(shell).toContain('TEN-STOP TOUR');
+    expect(shell).toContain('Five places.<br>One big');
+    expect(shell).toContain('Ten smiles, delivered.');
+    expect(shell).toContain('Route best');
+    expect(shell).toContain(
+      '<details id="tour-details"><summary>10 delivery splits <span>· same itinerary</span></summary><ol id="tour-splits" aria-label="Tour leg splits" tabindex="0"></ol></details>',
+    );
+    expect(shell).not.toMatch(/three|bakery first|returns to the bay|<details[^>]*\bopen/i);
+    const queue = renderDeliveryQueue(10);
+    expect([...queue.matchAll(/data-stop="(\d+)"/g)].map(match => Number(match[1]))).toEqual([
+      0, 1, 2, 3, 4, 5, 6, 7, 8, 9,
+    ]);
+    expect(queue).toContain('<span>10</span>');
   });
 
   it.each(variants)('retains navigation, actions and accessible overlays for $name', ({ prototype }) => {
@@ -38,7 +54,11 @@ describe('initial UI shell', () => {
     );
     expect(shell).toContain('<div id="mission-context" class="mission-context" hidden>');
     expect(shell).toContain('<div id="queue-stops"></div>');
-    expect(shell).toContain('<ol id="tour-splits" aria-label="Tour leg splits"></ol>');
+    expect(shell).toContain(
+      prototype?.id === 'tour'
+        ? '<ol id="tour-splits" aria-label="Tour leg splits" tabindex="0"></ol>'
+        : '<ol id="tour-splits" aria-label="Tour leg splits"></ol>',
+    );
     expect(shell).toContain('role="dialog" aria-modal="true" aria-labelledby="pause-title"');
     expect(shell).toContain('role="dialog" aria-modal="true" aria-labelledby="complete-title"');
     expect(shell).toContain('<div id="toast" class="toast" role="status" aria-live="polite">');
@@ -70,7 +90,13 @@ describe('initial UI shell', () => {
     const shell = renderUIShell(prototype);
     const isPlaytest = prototype !== null && prototype.id !== 'tour';
     expect(shell).toContain(isPlaytest ? `${prototype.name.toUpperCase()} PLAYTEST` : 'TINY PLANET COURIER');
-    expect(shell).toContain(isPlaytest ? 'One parcel. One smile.' : 'Three parcels. Three smiles.');
+    expect(shell).toContain(
+      isPlaytest
+        ? 'One parcel. One smile.'
+        : prototype?.id === 'tour'
+          ? 'Ten parcels. Ten smiles.'
+          : 'Three parcels. Three smiles.',
+    );
     expect(shell).toContain(
       `<div class="delivery-queue"><span>${isPlaytest ? 'One little mission' : 'Little missions'}</span>`,
     );

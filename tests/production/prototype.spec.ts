@@ -5,13 +5,13 @@ async function expectOfficialWelcome(page: Page) {
   await expect(page.locator('#app')).toHaveAttribute('data-mode', 'home');
   await expect(page.locator('#error-panel')).toBeHidden();
   await expect(page.locator('.home-view h1')).toBeVisible();
-  await expect(page.locator('.home-view h1')).toHaveText(/Three stops\.\s*One big day\./);
-  await expect(page.locator('.hero-copy > .eyebrow')).toHaveText('THREE-STOP TOUR');
+  await expect(page.locator('.home-view h1')).toHaveText(/Five places\.\s*One big day\./);
+  await expect(page.locator('.hero-copy > .eyebrow')).toHaveText('TEN-STOP TOUR');
   await expect(page.locator('.hero-description')).toHaveText(
-    /Bakery, station, garden\. One connected journey\.\s*Pick your paths and follow the roads between stops\./,
+    /Five places\. Ten little deliveries\.\s*Pick your paths and follow the roads between stops\./,
   );
   await expect(page.locator('.ticket-stamp')).toHaveText('READY TO GO');
-  await expect(page.locator('#parcel-count')).toHaveText('03');
+  await expect(page.locator('#parcel-count')).toHaveText('10');
   await expect(page.locator('.ticket-count small')).toHaveText('little parcels');
   await expect(page.locator('#app')).not.toContainText(/playtest/i);
   expect(await page.evaluate(() => '__planetTest' in window)).toBe(false);
@@ -33,9 +33,11 @@ async function startTour(page: Page) {
   await page.getByRole('button', { name: 'Start delivering', exact: true }).click();
   await expect(page.locator('#app')).toHaveAttribute('data-mode', 'playing');
   await expect(page.locator('#navigation-hud')).toBeVisible();
-  await expect(page.locator('#mission-name')).toHaveText('Sunrise Bakery');
-  await expect(page.locator('#mission-index')).toHaveText('01 / 03');
-  await expect(page.locator('#queue-stops .queue-stop')).toHaveCount(3);
+  await expect(page.locator('#mission-name')).toHaveText(
+    /^(Sunrise Bakery|Stargaze Station|Windmill Garden|Beacon Post|Redrock Depot)$/,
+  );
+  await expect(page.locator('#mission-index')).toHaveText('01 / 10');
+  await expect(page.locator('#queue-stops .queue-stop')).toHaveCount(10);
   await expect(page.locator('#stage canvas')).toBeFocused();
   expect(await page.evaluate(() => '__planetTest' in window)).toBe(false);
 }
@@ -56,6 +58,14 @@ for (const query of [
   '?prototype=constructor&test=1',
   '?prototype=__proto__&test=1',
   '?prototype=standard&prototype=bay&test=1',
+  '?test&tourSeed=227',
+  '?test=1&tourSeed=0',
+  '?prototype=station&test=1&tourSeed=1',
+  '?prototype=garden&test=1&tourSeed=invalid',
+  '?test=1&tourSeed=',
+  '?test=1&tourSeed=1.5',
+  '?test=1&tourSeed=Infinity',
+  '?tourSeed=227',
   '?prototype=unknown&prototype=standard&test=1',
 ]) {
   test(`production releases Tour without a test bridge: ${query || 'default'}`, async ({ page }) => {
@@ -65,9 +75,32 @@ for (const query of [
   });
 }
 
+test('production seed parameters cannot replace the independently offered itinerary', async ({ page }) => {
+  // Identical offer randomness makes isolation observable without any production bridge.
+  await page.addInitScript(() => {
+    Math.random = () => 0;
+  });
+  await loadTour(page);
+  await expect(page.locator('#ticket-next')).toHaveText('Next: Redrock Depot');
+  await startTour(page);
+  const offered = await page.locator('#mission-name').textContent();
+  expect(offered).toBe('Redrock Depot');
+  for (const query of ['?test&tourSeed=227', '?test=1&tourSeed=invalid', '?prototype=bay&test=1&tourSeed=1']) {
+    const errors = await loadTour(page, query);
+    await expect(page.locator('#ticket-next')).toHaveText(`Next: ${offered}`);
+    await startTour(page);
+    // DEV seed 227 starts at Bakery; the production query must still offer Depot.
+    await expect(page.locator('#mission-name')).toHaveText(offered!);
+    expect(await page.evaluate(() => '__planetTest' in window)).toBe(false);
+    expect(errors).toEqual([]);
+  }
+});
+
 test('public Tour supports keyboard driving, pause, recovery, restart and a clean home/start', async ({ page }) => {
   const errors = await loadTour(page);
   await startTour(page);
+  const firstTarget = await page.locator('#mission-name').textContent();
+  const offeredQueue = await page.locator('#queue-stops .queue-stop').allTextContents();
   await expect.poll(() => distance(page)).toBeGreaterThan(0);
   const initialDistance = await distance(page);
   await page.keyboard.down('KeyW');
@@ -102,8 +135,9 @@ test('public Tour supports keyboard driving, pause, recovery, restart and a clea
   await expect(page.locator('#toast.visible')).toContainText(/Back at .+\. Your deliveries are safe\./);
   await expect(page.locator('#mission-hint')).toBeVisible();
   await expect.poll(() => speed(page)).toBe(0);
-  await expect(page.locator('#mission-name')).toHaveText('Sunrise Bakery');
-  await expect(page.locator('#mission-index')).toHaveText('01 / 03');
+  await expect(page.locator('#mission-name')).toHaveText(firstTarget!);
+  expect(await page.locator('#queue-stops .queue-stop').allTextContents()).toEqual(offeredQueue);
+  await expect(page.locator('#mission-index')).toHaveText('01 / 10');
 
   await page.getByRole('button', { name: 'Pause game' }).click();
   await expect(pause).toBeVisible();
@@ -114,8 +148,9 @@ test('public Tour supports keyboard driving, pause, recovery, restart and a clea
   await expect(page.locator('#app')).toHaveAttribute('data-mode', 'playing');
   await expect(page.locator('#app')).toHaveAttribute('data-delivered', 'false');
   await expect(pause).toBeHidden();
-  await expect(page.locator('#mission-name')).toHaveText('Sunrise Bakery');
-  await expect(page.locator('#mission-index')).toHaveText('01 / 03');
+  await expect(page.locator('#mission-name')).toHaveText(firstTarget!);
+  expect(await page.locator('#queue-stops .queue-stop').allTextContents()).toEqual(offeredQueue);
+  await expect(page.locator('#mission-index')).toHaveText('01 / 10');
   await expect(page.locator('#queue-stops .is-done')).toHaveCount(0);
   await expect(page.locator('#tour-result')).toBeHidden();
   await expect(page.locator('#bay-result')).toBeHidden();
@@ -132,7 +167,7 @@ test('public Tour supports keyboard driving, pause, recovery, restart and a clea
   await startTour(page);
   await expect(page.locator('#speed')).toHaveText('00');
   await expect(page.locator('#queue-stops .is-done')).toHaveCount(0);
-  await expect(page.locator('#toast.visible')).toContainText('Bakery first.');
+  await expect(page.locator('#toast.visible')).toContainText('Follow the compass to your first neighbor.');
   expect(errors).toEqual([]);
 });
 

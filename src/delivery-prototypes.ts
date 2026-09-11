@@ -1,11 +1,18 @@
-import { TOUR_RECORD_KEY } from './tour-session';
+import { normalizeTourSeed } from './tour-itinerary';
 
 export type PrototypeId = 'bay' | 'station' | 'garden' | 'tour';
 
 /** Authored delivery identity and copy only; scene construction stays outside the UI. */
-export interface PrototypeDefinition {
-  readonly id: PrototypeId;
-  readonly bestScoreKey: string;
+export type PrototypeDefinition = PrototypeCopy &
+  (
+    | { readonly id: 'tour'; readonly bestScoreKey: null }
+    | {
+        readonly id: Exclude<PrototypeId, 'tour'>;
+        readonly bestScoreKey: string;
+      }
+  );
+
+interface PrototypeCopy {
   readonly name: string;
   readonly destinationName: string;
   readonly parcelDescription: string;
@@ -36,7 +43,7 @@ export interface PrototypeDefinition {
   };
 }
 
-export const PROTOTYPES: Readonly<Record<PrototypeId, PrototypeDefinition>> = {
+export const PROTOTYPES: Readonly<{ [Id in PrototypeId]: PrototypeDefinition & { readonly id: Id } }> = {
   bay: {
     id: 'bay',
     bestScoreKey: 'tiny-planet-courier:bay-leap:best:v1',
@@ -135,23 +142,22 @@ export const PROTOTYPES: Readonly<Record<PrototypeId, PrototypeDefinition>> = {
   },
   tour: {
     id: 'tour',
-    bestScoreKey: TOUR_RECORD_KEY,
-    name: 'Three-stop Tour',
-    destinationName: 'Sunrise Bakery',
-    parcelDescription: 'Three parcels for three neighbors',
+    bestScoreKey: null, // Tour records belong to the selected session, never a global key.
+    name: 'Ten-stop Tour',
+    destinationName: 'Your next neighbor',
+    parcelDescription: 'Ten parcels for five neighbors',
     home: {
-      eyebrow: 'THREE-STOP TOUR',
-      title: 'Three stops.<br>One big <span class="warm-word">day.</span>',
-      description:
-        'Bakery, station, garden. One connected journey.<br>Pick your paths and follow the roads between stops.',
-      ticketHeading: 'ONE PLANET · THREE STOPS',
+      eyebrow: 'TEN-STOP TOUR',
+      title: 'Five places.<br>One big <span class="warm-word">day.</span>',
+      description: 'Five places. Ten little deliveries.<br>Pick your paths and follow the roads between stops.',
+      ticketHeading: 'ONE PLANET · TEN DELIVERIES',
       place: 'Mint Planet',
       code: 'TOUR-01',
       parcelLabel: 'little parcels',
-      ticketDetail: 'Bay → Station → Garden',
+      ticketDetail: 'Five places · Ten deliveries',
     },
     hints: {
-      start: 'Bakery first. Take the coast road—or boost across the bay.',
+      start: 'Follow the compass to your first neighbor. Park in the glow.',
       recovery: 'Back at your last reached safe point. Your deliveries are safe.',
       choice: 'Choose a local path, then follow the connecting road.',
       outer: 'Take the wide way round.',
@@ -159,14 +165,25 @@ export const PROTOTYPES: Readonly<Record<PrototypeId, PrototypeDefinition>> = {
       nearDestination: 'Brake and park in the glow.',
     },
     result: {
-      heading: 'Three smiles, delivered.',
-      description: 'Keep exploring. The road returns to the bay.',
-      bestLabel: 'Tour best',
-      newRecord: 'A new tour best!',
-      delivered: 'All three parcels delivered.',
+      heading: 'Ten smiles, delivered.',
+      description: 'All delivered. Keep exploring.',
+      bestLabel: 'Route best',
+      newRecord: 'A new route best!',
+      delivered: 'All ten parcels delivered.',
     },
   },
 };
+
+/** Call once per offered new Tour, never on restart or observation. */
+export function selectTourSeed(search: string, development: boolean, random = Math.random): number {
+  if (import.meta.env.DEV && development) {
+    const parameters = new URLSearchParams(search);
+    const value = parameters.get('tourSeed');
+    if (parameters.has('test') && value?.trim() && Number.isSafeInteger(Number(value)))
+      return normalizeTourSeed(Number(value));
+  }
+  return Math.floor(random() * 0x100000000);
+}
 
 export function selectPrototype(search: string, development: boolean): PrototypeDefinition | null {
   if (!development) return PROTOTYPES.tour;

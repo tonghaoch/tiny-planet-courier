@@ -1,5 +1,6 @@
 import type { Page } from '@playwright/test';
 import type { PlanetTestControls, PlanetTestNavigationFixture } from '../../src/dev/test-bridge-types';
+import type { TourStopId } from '../../src/tour-layout';
 
 // evaluate callbacks run in the browser: keep guards inside them, never close over a Node helper.
 export const planetSnapshot = (page: Page) =>
@@ -88,9 +89,17 @@ export const dockAtTarget = (page: Page) =>
     bridge.dockAtTarget();
   });
 
+/** Physical catalog index, not an itinerary occurrence. */
 export const dockAtStop = (page: Page, index: number) =>
   page.evaluate(index => {
     const bridge = window.__planetTest;
     if (!bridge) throw new Error('Planet test bridge missing; load a DEV page with ?test=1.');
     bridge.dockAtStop(index);
   }, index);
+
+export const dockAtLocation = (page: Page, id: TourStopId) =>
+  page.evaluate(id => {
+    const bridge = window.__planetTest;
+    if (!bridge) throw new Error('Planet test bridge missing; load a DEV page with ?test=1.');
+    bridge.dockAtLocation(id);
+  }, id);

@@ -3,8 +3,8 @@ import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { gzipSync } from 'node:zlib';
 
-// Original raw: 684308 B; summed per-file gzip (level 9): 179766 B. Aggregate allowance: +2%.
-export const BUNDLE_BUDGETS = Object.freeze({ chunkRawExclusive: 500000, totalRaw: 697994, totalGzip: 183361 });
+// User-approved feature budget for five locations / ten deliveries; each chunk remains strictly below 500000 B.
+export const BUNDLE_BUDGETS = Object.freeze({ chunkRawExclusive: 500000, totalRaw: 715000, totalGzip: 190000 });
 export const DEV_MARKERS = ['__planetTest', 'setNavigationFixture', 'dockAtStop'];
 const isJavaScript = file => /\.(?:js|mjs|cjs)$/i.test(file);
 const normalize = value => value.replaceAll('\\', '/');

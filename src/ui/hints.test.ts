@@ -257,6 +257,44 @@ describe('mission hint priority', () => {
     });
   });
 
+  describe.each(['beacon', 'depot'] as const)('%s Tour road hints', stopId => {
+    const state = {
+      ...base,
+      prototype: PROTOTYPES.tour,
+      targetName: stopId === 'beacon' ? 'Beacon Post' : 'Redrock Depot',
+    };
+    it('uses generic road metadata without inheriting Bay ramp/airborne hints', () => {
+      for (const route of ['outer', 'inner', null] as const)
+        expect(missionHint({ ...state, driveState: drive({ stopId, route, phase: 'airborne', onRamp: true }) })).toBe(
+          PROTOTYPES.tour.hints[route ?? 'choice'],
+        );
+      expect(missionHint({ ...state, driveState: drive({ stopId, nearDestination: true, route: 'inner' }) })).toBe(
+        `${state.targetName} ahead. Brake before the glow.`,
+      );
+    });
+    it('preserves transfer, recovery, arrival and missing-heading priority', () => {
+      expect(
+        missionHint({ ...state, driveState: drive({ stopId, navigationPhase: 'transfer', reverseToExit: true }) }),
+      ).toBe('Next road is behind you. Reverse and turn gently.');
+      expect(
+        missionHint({
+          ...state,
+          arrival: true,
+          distance: 0,
+          heading: null,
+          driveState: drive({ stopId, phase: 'recovering' }),
+        }),
+      ).toBe('Recovering. Your parcel is safe.');
+      expect(missionHint({ ...state, arrival: true, distance: 0, driveState: drive({ stopId, route: 'outer' }) })).toBe(
+        'Hold still to deliver a little joy…',
+      );
+      expect(missionHint({ ...state, heading: null, driveState: drive({ stopId }) })).toBe(
+        'Above the delivery. Land, then park.',
+      );
+      expect(driveStateLabel(PROTOTYPES.tour, drive({ stopId, onRamp: true, route: 'inner' }))).toBe('Cruising');
+    });
+  });
+
   it('does not mutate its computed state', () => {
     const state = Object.freeze({ ...base, driveState: Object.freeze(drive({ onRamp: true })) });
     expect(missionHint(state)).toBe(PROTOTYPES.bay.hints.inner);
